@@ -1,0 +1,34 @@
+# Normaliser les fins de ligne
+* text=auto
+
+# Forcer LF pour les fichiers texte (code)
+*.js   text eol=lf
+*.ts   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.css  text eol=lf
+*.scss text eol=lf
+*.html text eol=lf
+*.swift text eol=lf
+*.dart text eol=lf
+*.cc   text eol=lf
+*.cmake text eol=lf
+
+# Binaires / ne jamais transformer
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.pdf  binary
+*.ico  binary
+*.jar  binary
+*.exe  binary
+*.dll  binary
+*.so   binary
+*.a    binary
+
+# Flutter/Android/iOS : certains fichiers générés peuvent être laissés tels quels
+# Si tu veux les garder, la règle text=auto suffit.
+``

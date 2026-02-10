@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "337690388987",
+    "project_id": "santesynchro",
+    "storage_bucket": "santesynchro.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:337690388987:android:f4d04f7dd7c696e133435e",
+        "android_client_info": {
+          "package_name": "com.santesynchro.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "337690388987-u49cqkvt7jm6gilj762l3nqp3j3rnv8q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.santesynchro.app",
+            "certificate_hash": "f12eb9567fc23671e4d782cb2e295fa8a0a03846"
+          }
+        },
+        {
+          "client_id": "337690388987-59bm38gh2uu6gm97rq08nno1v9cvou73.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlz4IwaQuK4DIsYxvHf3UHRKYDlrxGotA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "337690388987-59bm38gh2uu6gm97rq08nno1v9cvou73.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
