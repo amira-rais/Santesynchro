@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
 import authRoutes from "./routes/auth.routes";
+import mealsRoutes from "./routes/meals.routes";
+import goalsRoutes from "./routes/goals.routes";
+
 
 const app = express();
 
@@ -13,5 +16,7 @@ app.get("/health", (req, res) => {
 
 // Register routes
 app.use("/auth", authRoutes);
+app.use("/meals", mealsRoutes);
+app.use("/goals", goalsRoutes);
 
 export default app;
