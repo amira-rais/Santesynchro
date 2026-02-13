@@ -41,6 +41,10 @@ android {
     }
 }
 
+dependencies {
+    // Let the Google sign-in plugin manage its Play Services dependency.
+}
+
 flutter {
     source = "../.."
 }
