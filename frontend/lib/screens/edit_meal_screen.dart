@@ -1,39 +1,39 @@
+// lib/screens/edit_meal_screen.dart
 import 'package:flutter/material.dart';
 import 'package:frontend/services/api.dart';
-import 'package:frontend/core/theme_provider.dart';
 
-/// Écran pour ajouter un nouveau repas
-/// Permet à l'utilisateur de saisir les détails d'un repas
-class AddMealScreen extends StatefulWidget {
-  /// Fournisseur pour gérer le thème (optionnel)
-  final ThemeProvider? themeProvider;
+/// Écran pour modifier un repas existant
+/// Permet à l'utilisateur de changer les détails d'un repas
+class EditMealScreen extends StatefulWidget {
+  /// Le repas à modifier (reçu de MealsScreen)
+  final Map<String, dynamic> meal;
   
-  const AddMealScreen({super.key, this.themeProvider});
-  
+  const EditMealScreen({super.key, required this.meal});
+
   @override
-  State<AddMealScreen> createState() => _AddMealScreenState();
+  State<EditMealScreen> createState() => _EditMealScreenState();
 }
 
-class _AddMealScreenState extends State<AddMealScreen> {
+class _EditMealScreenState extends State<EditMealScreen> {
   /// Clé du formulaire pour la validation
   final _formKey = GlobalKey<FormState>();
   /// Contrôle le nom du repas
-  final _nameCtrl = TextEditingController();
-  /// Contrôle la quantité (initialisée à 1)
-  final _qtyCtrl = TextEditingController(text: '1');
-  /// Type de repas sélectionné (petit-déjeuner, déjeuner, dîner, snack)
-  String _type = 'breakfast';
-  /// Unité de mesure optionnelle (g, ml, pièces, portion)
+  late TextEditingController _nameCtrl;
+  /// Contrôle la quantité
+  late TextEditingController _qtyCtrl;
+  /// Type de repas actuellement sélectionné
+  late String _type;
+  /// Unité de mesure
   String? _unit;
-  /// Indique si l'enregistrement est en cours
-  bool saving = false;
+  /// Indique si la mise à jour est en cours
+  bool _saving = false;
 
-  /// Mappe each meal type à son icône correspondante
+  /// Mappe each meal type à son icône
   final _mealIcons = {
-    'breakfast': Icons.coffee,      // Café = petit-déjeuner
-    'lunch': Icons.restaurant,      // Restaurant = déjeuner
-    'dinner': Icons.dinner_dining,  // Fourchette/couteau = dîner
-    'snack': Icons.cake,            // Gâteau = snack
+    'breakfast': Icons.coffee,
+    'lunch': Icons.restaurant,
+    'dinner': Icons.dinner_dining,
+    'snack': Icons.cake,
   };
 
   /// Mappe each meal type à son label en français
@@ -44,47 +44,66 @@ class _AddMealScreenState extends State<AddMealScreen> {
     'snack': 'Snack',
   };
 
-  /// Enregistre le repas dans la base de données
-  /// Valide le formulaire et appelle l'API backend
+  @override
+  void initState() {
+    super.initState();
+    // Initialise les contrôleurs avec les données du repas
+    final m = widget.meal;
+    _nameCtrl = TextEditingController(text: (m['name'] ?? '').toString());
+    _qtyCtrl = TextEditingController(text: (m['quantity'] ?? 1).toString());
+    _type = (m['type'] ?? 'breakfast').toString();
+    _unit = m['unit'] == null ? null : m['unit'].toString();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _qtyCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Enregistre les modifications du repas
+  /// Valide le formulaire et met à jour l'API backend
   Future<void> _save() async {
-    // Vérifie que tous les champs sont valides
     if (!_formKey.currentState!.validate()) return;
-    setState(() => saving = true);
+    setState(() => _saving = true);
     try {
-      // Prépare les données du repas à envoyer
-      final body = {
+      // Prépare les données mises à jour
+      final updates = {
         'name': _nameCtrl.text.trim(),
         'type': _type,
         'quantity': int.tryParse(_qtyCtrl.text.trim()) ?? 1,
         'unit': _unit,
-        'nutrition': null,
       };
-      await Api.addMeal(body);
-      if (mounted) Navigator.pop(context, true);
+
+      await Api.updateMeal(widget.meal['id'].toString(), updates);
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      setState(() => saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ajout échoué: $e')));
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Mise à jour échouée: $e')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final created = (widget.meal['createdAt'] ?? '')
+        .toString()
+        .replaceAll('T', ' ')
+        .replaceAll('Z', '')
+        .split('.')
+        .first;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ajouter un repas'),
+        title: const Text('Modifier le repas'),
         elevation: 0,
-        actions: [
-          if (widget.themeProvider != null)
-            IconButton(
-              icon: Icon(
-                widget.themeProvider!.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              ),
-              onPressed: () => widget.themeProvider!.toggleDarkMode(),
-            ),
-        ],
       ),
-      body: saving
+      body: _saving
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
             child: Padding(
@@ -95,18 +114,40 @@ class _AddMealScreenState extends State<AddMealScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 16),
-                    // Nom du repas
+                    // Info création
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Enregistré le',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            created,
+                            style: const TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Nom
                     TextFormField(
                       controller: _nameCtrl,
                       decoration: InputDecoration(
                         labelText: 'Nom du repas',
-                        hintText: 'Ex: Omelette aux champignons',
                         prefixIcon: const Icon(Icons.restaurant_menu),
                       ),
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
                     ),
                     const SizedBox(height: 24),
-                    // Type de repas avec boutons visuels
+                    // Type de repas
                     Text(
                       'Type de repas',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -184,7 +225,7 @@ class _AddMealScreenState extends State<AddMealScreen> {
                               prefixIcon: const Icon(Icons.scale),
                             ),
                             validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'Requis'
+                                ? 'Requise'
                                 : null,
                           ),
                         ),
@@ -212,8 +253,8 @@ class _AddMealScreenState extends State<AddMealScreen> {
                     // Bouton enregistrer
                     ElevatedButton.icon(
                       onPressed: _save,
-                      icon: const Icon(Icons.check_circle),
-                      label: const Text('Enregistrer le repas'),
+                      icon: const Icon(Icons.save),
+                      label: const Text('Enregistrer les modifications'),
                     ),
                     const SizedBox(height: 12),
                     // Bouton annuler
@@ -228,12 +269,5 @@ class _AddMealScreenState extends State<AddMealScreen> {
             ),
           ),
     );
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _qtyCtrl.dispose();
-    super.dispose();
   }
 }

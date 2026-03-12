@@ -1,19 +1,32 @@
+// Importation des types Request et Response d'Express
 import { Request, Response } from "express";
-import { addMealService, getMealsService, getMealByIdService, updateMealService, deleteMealService } from "../services/meals.service";
+// Importation de la configuration Firebase
+import { db } from "../config/firebase";
+// Importation de uuid pour générer des identifiants uniques
+import { v4 as uuidv4 } from "uuid";
+// Importation des interfaces de modèles
+import { Meal, MealType } from "../models/meal.model";
 
 
+// Contrôleur pour ajouter un nouveau repas
 export const addMeal = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { name, type, quantity, unit, nutrition } = req.body;
 
+    // Vérification des champs obligatoires
     if (!name || !type || !quantity) {
       return res.status(400).json({
         message: "name, type and quantity are required",
       });
     }
 
-    const meal = await addMealService(uid!, {
+    // Génération d'un identifiant unique pour le repas
+    const mealId = uuidv4();
+
+    // Construction des données du repas
+    const mealData = {
+      id: mealId,
       name,
       type,
       quantity,
@@ -21,83 +34,153 @@ export const addMeal = async (req: Request, res: Response) => {
       nutrition: nutrition ?? null,
       createdAt: new Date().toISOString(),
       source: "manual",
-    });
+    };
 
-    return res.status(201).json(meal);
+    // Référence au document du repas dans Firestore
+    const mealRef = db
+      .collection("users")
+      .doc(uid!)
+      .collection("meals")
+      .doc(mealId);
+
+    // Enregistrement du repas dans Firestore
+    await mealRef.set(mealData);
+
+    // Retourne le repas créé
+    return res.status(201).json(mealData);
 
   } catch (err) {
+    // Gestion des erreurs
     console.error("Error adding meal:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
+// Contrôleur pour récupérer tous les repas d'un utilisateur
 export const getMeals = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
 
-    const meals = await getMealsService(uid!);
+    // Référence à la collection des repas, triée par date décroissante
+    const mealsRef = db
+      .collection("users")
+      .doc(uid!)
+      .collection("meals")
+      .orderBy("createdAt", "desc");
 
+    // Récupération des repas depuis Firestore
+    const snapshot = await mealsRef.get();
+
+    const meals: any[] = [];
+    // Parcourt chaque document et l'ajoute à la liste
+    snapshot.forEach((doc) => {
+      meals.push(doc.data());
+    });
+
+    // Retourne la liste des repas
     return res.status(200).json(meals);
 
   } catch (err) {
+    // Gestion des erreurs
     console.error("Error fetching meals:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
+// Contrôleur pour récupérer un repas par son ID
 export const getMealById = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
-    const mealId = req.params.id;
+    const mealId = req.params.id as string;
 
-    const meal = await getMealByIdService(uid!, mealId);
+    // Référence au document du repas dans Firestore
+    const mealRef = db
+      .collection("users")
+      .doc(uid!)
+      .collection("meals")
+      .doc(mealId);
 
-    if (!meal) {
+    // Récupération du document
+    const snapshot = await mealRef.get();
+
+    // Si le repas n'existe pas
+    if (!snapshot.exists) {
       return res.status(404).json({ message: "Meal not found" });
     }
 
-    return res.status(200).json(meal);
+    // Retourne le repas trouvé
+    return res.status(200).json(snapshot.data());
 
   } catch (err) {
+    // Gestion des erreurs
     console.error("Error fetching meal:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
+// Contrôleur pour mettre à jour un repas existant
 export const updateMeal = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
-    const mealId = req.params.id;
+    const mealId = req.params.id as string;
     const updates = req.body;
 
+    // Vérifie si des champs à mettre à jour sont fournis
     if (!updates || Object.keys(updates).length === 0) {
       return res.status(400).json({ message: "No fields to update" });
     }
 
-    const updatedMeal = await updateMealService(uid!, mealId, updates);
+    // Référence au document du repas dans Firestore
+    const mealRef = db
+      .collection("users")
+      .doc(uid!)
+      .collection("meals")
+      .doc(mealId);
 
-    if (!updatedMeal) {
+    // Vérifie si le repas existe
+    const snapshot = await mealRef.get();
+    if (!snapshot.exists) {
       return res.status(404).json({ message: "Meal not found" });
     }
 
-    return res.status(200).json(updatedMeal);
+    // Mise à jour du repas dans Firestore
+    await mealRef.update(updates);
+
+    // Retourne le repas mis à jour
+    return res.status(200).json({
+      id: mealId,
+      ...snapshot.data(),
+      ...updates,
+    });
 
   } catch (err) {
+    // Gestion des erreurs
     console.error("Error updating meal:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
+// Contrôleur pour supprimer un repas
 export const deleteMeal = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
-    const mealId = req.params.id;
+    const mealId = req.params.id as string;
 
-    const success = await deleteMealService(uid!, mealId);
+    // Référence au document du repas dans Firestore
+    const mealRef = db
+      .collection("users")
+      .doc(uid!)
+      .collection("meals")
+      .doc(mealId);
 
-    if (!success) {
+    // Vérifie si le repas existe
+    const snapshot = await mealRef.get();
+    if (!snapshot.exists) {
       return res.status(404).json({ message: "Meal not found" });
     }
+
+    // Suppression du repas dans Firestore
+    await mealRef.delete();
 
     return res.status(200).json({ message: "Meal deleted successfully" });
 
