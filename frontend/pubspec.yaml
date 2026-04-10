@@ -10,6 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   cupertino_icons: ^1.0.8
   firebase_core: ^2.30.0
@@ -18,6 +20,10 @@ dependencies:
   http: ^1.0.0
   shared_preferences: ^2.2.2
   font_awesome_flutter: ^10.12.0
+  image_picker: ^1.2.1
+  cloudinary_public: ^0.23.1
+  health: ^13.1.4
+  permission_handler: ^12.0.1
 
 dev_dependencies:
   flutter_test:

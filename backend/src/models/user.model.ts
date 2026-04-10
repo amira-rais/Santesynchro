@@ -14,4 +14,11 @@ export interface User {
   gender?: "male" | "female";
   height?: number; // cm
   weight?: number; // kg
+  photoUrl?: string | null;
+  nutritionGoals?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
 }

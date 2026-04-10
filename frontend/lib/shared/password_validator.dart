@@ -59,10 +59,6 @@ class PasswordValidationWidget extends StatelessWidget {
             size: 16,
           ),
           const SizedBox(width: 8),
-          if (isValid) ...[
-            const Icon(Icons.check, color: Colors.green, size: 14),
-            const SizedBox(width: 4),
-          ],
           Text(
             label,
             style: TextStyle(

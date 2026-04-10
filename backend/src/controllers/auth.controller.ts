@@ -2,6 +2,7 @@
 import { Request, Response } from "express";
 // Importation de la configuration Firebase
 import { db, authAdmin } from "../config/firebase";
+import admin from "../config/firebase";
 // Importation de l'interface User
 import { User } from "../models/user.model";
 
@@ -45,6 +46,10 @@ export const getMe = async (req: Request, res: Response) => {
       await userRef.set(userData);
     }
 
+    // Vérifie si l'utilisateur a déjà des objectifs
+    const goalsSnap = await userRef.collection("goals").limit(1).get();
+    const hasGoals = !goalsSnap.empty;
+
     // Récupère les données utilisateur mises à jour
     const userDoc = await userRef.get();
 
@@ -52,11 +57,33 @@ export const getMe = async (req: Request, res: Response) => {
     return res.json({
       uid,
       ...userDoc.data(),
+      hasGoals,
     });
 
   } catch (error) {
     // Gestion des erreurs
     console.error("Error in getMe:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+// Contrôleur pour mettre à jour les informations de l'utilisateur
+export const updateMe = async (req: Request, res: Response) => {
+  try {
+    const uid = req.user?.uid;
+    if (!uid) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const updates = req.body;
+    const userRef = db.collection("users").doc(uid);
+    
+    await userRef.update(updates);
+
+    return res.json({ message: "Profile updated successfully" });
+  } catch (error) {
+    console.error("Error in updateMe:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

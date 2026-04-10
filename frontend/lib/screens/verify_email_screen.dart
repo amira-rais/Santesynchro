@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:frontend/core/theme_provider.dart';
+import 'package:frontend/core/language_provider.dart';
+import 'package:frontend/core/app_localizations.dart';
 import 'package:frontend/services/api.dart';
 
 /// Écran de vérification d'email / Saisie OTP
@@ -79,35 +81,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     }
   }
 
-  /// Vérifie si l'email Firebase est vérifié (pour l'inscription)
-  Future<void> _checkFirebaseVerified({bool auto = false}) async {
-    if (!auto) setState(() => _loading = true);
-    
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      await user?.reload();
-      final verified = FirebaseAuth.instance.currentUser?.emailVerified ?? false;
-      
-      if (verified) {
-        _checkTimer?.cancel();
-        _countdownTimer?.cancel();
-        if (mounted) Navigator.pushReplacementNamed(context, '/goals');
-      } else if (!auto && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Email pas encore vérifié. Vérifiez votre boîte mail.')),
-        );
-      }
-    } catch (e) {
-      if (!auto && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : ${e.toString()}')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
   /// Renvoie l'email ou le code OTP
   Future<void> _resend() async {
     if (_secondsLeft > 0) return;
@@ -126,16 +99,17 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       
       _startCountdown();
       if (mounted) {
+        final loc = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isPasswordReset ? 'Nouveau code OTP envoyé !' : 'Lien de vérification renvoyé !')),
+          SnackBar(content: Text(isPasswordReset ? loc.translate('otp_resent') : loc.translate('link_resent'))),
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : ${e.toString()}')),
-        );
-      }
+      if (!mounted) return;
+      final loc = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${loc.translate('error')}: $e')),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -190,6 +164,40 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     });
   }
 
+  Future<void> _checkFirebaseVerified({bool auto = false}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    
+    try {
+      await user.reload();
+      final freshUser = FirebaseAuth.instance.currentUser;
+      if (freshUser != null && freshUser.emailVerified) {
+        _checkTimer?.cancel();
+        final userData = await Api.me();
+        if (mounted) {
+          if (userData['hasGoals'] == true) {
+            Navigator.pushReplacementNamed(context, '/home');
+          } else {
+            Navigator.pushReplacementNamed(context, '/goals');
+          }
+        }
+      } else {
+        if (!auto && mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             const SnackBar(content: Text("L'email n'est pas encore vérifié.")),
+           );
+        }
+      }
+    } catch (e) {
+      if (!auto && mounted) {
+        final loc = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${loc.translate('error')}: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
@@ -197,11 +205,21 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     final email = args?['email'] ?? 'votre e-mail';
     final canResend = _secondsLeft == 0;
 
+    final loc = AppLocalizations.of(context);
+    final langProvider = LanguageProvider();
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(isPasswordReset ? 'Réinitialisation' : 'Vérification email'),
+        title: Text(isPasswordReset ? loc.translate('reset_title') : loc.translate('verify_email_title')),
         elevation: 0,
         actions: [
+          IconButton(
+            icon: Text(
+              langProvider.currentLocaleCode == 'fr' ? '🇫🇷' : '🇬🇧',
+              style: const TextStyle(fontSize: 22),
+            ),
+            onPressed: () => langProvider.toggleLanguage(),
+          ),
           IconButton(
             icon: Icon(
               widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
@@ -233,15 +251,15 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                isPasswordReset ? 'Saisissez le code' : 'Vérifiez votre email',
+                isPasswordReset ? loc.translate('enter_code') : loc.translate('verify_email_header'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               Text(
                 isPasswordReset
-                    ? 'Un code à 6 chiffres a été envoyé à\n$email'
-                    : 'Un lien de vérification a été envoyé à\n$email',
+                    ? '${loc.translate('code_sent_to')}$email'
+                    : '${loc.translate('link_sent_to')}$email',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: Colors.grey[600], height: 1.6),
               ),
@@ -300,7 +318,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
               else
                 ElevatedButton(
                   onPressed: isPasswordReset ? _verifyOTP : () => _checkFirebaseVerified(),
-                  child: Text(isPasswordReset ? "Vérifier le code" : "J'ai vérifié mon email"),
+                  child: Text(isPasswordReset ? loc.translate('verify_code_button') : loc.translate('i_verified')),
                 ),
 
               const SizedBox(height: 24),
@@ -309,13 +327,13 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   children: [
                     if (_secondsLeft > 0)
                       Text(
-                        'Renvoyer dans ${_secondsLeft}s',
+                        '${loc.translate('resend_in')}${_secondsLeft}s',
                         style: TextStyle(color: Colors.grey[500], fontSize: 13),
                       ),
                     TextButton(
                       onPressed: canResend ? _resend : null,
                       child: Text(
-                        isPasswordReset ? 'Renvoyer le code' : 'Renvoyer le lien',
+                        isPasswordReset ? loc.translate('resend_code') : loc.translate('resend_link'),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: canResend ? Theme.of(context).primaryColor : Colors.grey[400],
@@ -329,7 +347,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
               TextButton(
                 onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
                 child: Text(
-                  'Retour à la connexion',
+                  loc.translate('back_to_login'),
                   style: TextStyle(color: Colors.grey[500], fontSize: 13),
                 ),
               ),

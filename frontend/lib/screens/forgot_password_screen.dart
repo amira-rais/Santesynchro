@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:frontend/core/theme_provider.dart';
+import 'package:frontend/core/language_provider.dart';
+import 'package:frontend/core/app_localizations.dart';
 import 'package:frontend/services/api.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -61,67 +63,77 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    final langProvider = LanguageProvider();
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Réinitialisation'),
+        title: Text(loc.translate('forgot_password_title')),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: Text(
+              langProvider.currentLocaleCode == 'fr' ? '🇫🇷' : '🇬🇧',
+              style: const TextStyle(fontSize: 22),
+            ),
+            onPressed: () => langProvider.toggleLanguage(),
+          ),
+          IconButton(
+            icon: Icon(
+              widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+            ),
+            onPressed: () => widget.themeProvider.toggleDarkMode(),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 40),
-                    Icon(
-                      Icons.lock_reset,
-                      size: 80,
-                      color: Theme.of(context).primaryColor,
+          : Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 20),
+                  Text(
+                    loc.translate('forgot_password_header'),
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    loc.translate('forgot_password_desc'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 48),
+                  TextFormField(
+                    controller: _emailCtrl,
+                    decoration: InputDecoration(
+                      labelText: loc.translate('email_label'),
+                      hintText: loc.translate('email_hint'),
+                      prefixIcon: const Icon(Icons.email_outlined),
                     ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Mot de passe oublié ?',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Saisissez votre e-mail pour recevoir un lien de réinitialisation sécurisé.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 40),
-
-                    TextFormField(
-                      controller: _emailCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Adresse e-mail',
-                        prefixIcon: Icon(Icons.email_outlined),
-                        hintText: 'exemple@mail.com',
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (v) => (v == null || v.isEmpty || !v.contains('@')) 
-                          ? 'E-mail valide requis' 
-                          : null,
-                    ),
-
-                    const SizedBox(height: 32),
-                    ElevatedButton(
-                      onPressed: _sendResetLink,
-                      child: const Text('Continuer'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Retour à la connexion'),
-                    ),
-                  ],
-                ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? loc.translate('email_required')
+                        : (!v.contains('@') ? loc.translate('email_invalid') : null),
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    onPressed: _sendResetLink,
+                    child: Text(loc.translate('send_link')),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Retour à la connexion'),
+                  ),
+                ],
               ),
             ),
+          ),
     );
   }
 

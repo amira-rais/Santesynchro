@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:frontend/core/theme_provider.dart';
+import 'package:frontend/core/language_provider.dart';
+import 'package:frontend/core/app_localizations.dart';
 import 'package:frontend/services/api.dart';
 
 /// Écran de connexion
@@ -40,17 +42,22 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _pwdCtrl.text.trim(),
       );
       // Crée ou récupère le profil utilisateur dans Firestore
-      await Api.me();
+      final userData = await Api.me();
       if (!mounted) return;
       if (FirebaseAuth.instance.currentUser?.emailVerified == true) {
-        Navigator.pushReplacementNamed(context, '/goals');
+        if (userData['hasGoals'] == true) {
+          Navigator.pushReplacementNamed(context, '/home');
+        } else {
+          Navigator.pushReplacementNamed(context, '/goals');
+        }
       } else {
         Navigator.pushReplacementNamed(context, '/verify-email');
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
+      final loc = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Échec de connexion')),
+        SnackBar(content: Text(e.message ?? loc.translate('login_failed'))),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -73,10 +80,14 @@ class _LoginScreenState extends State<LoginScreen> {
           idToken: googleAuth.idToken, accessToken: googleAuth.accessToken);
       await FirebaseAuth.instance.signInWithCredential(cred);
       // Crée ou récupère le profil utilisateur dans Firestore
-      await Api.me();
+      final userData = await Api.me();
       if (!mounted) return;
       if (FirebaseAuth.instance.currentUser?.emailVerified == true) {
-        Navigator.pushReplacementNamed(context, '/goals');
+        if (userData['hasGoals'] == true) {
+          Navigator.pushReplacementNamed(context, '/home');
+        } else {
+          Navigator.pushReplacementNamed(context, '/goals');
+        }
       } else {
         Navigator.pushReplacementNamed(context, '/verify-email');
       }
@@ -90,11 +101,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    final langProvider = LanguageProvider();
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Connexion'),
+        title: Text(loc.translate('login_title')),
         elevation: 0,
         actions: [
+          IconButton(
+            icon: Text(
+              langProvider.currentLocaleCode == 'fr' ? '🇫🇷' : '🇬🇧',
+              style: const TextStyle(fontSize: 22),
+            ),
+            onPressed: () => langProvider.toggleLanguage(),
+            tooltip: 'Change Language',
+          ),
           IconButton(
             icon: Icon(
               widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
@@ -140,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Gestion complète de votre santé',
+                            loc.translate('login_subtitle'),
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[600],
@@ -154,22 +176,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _emailCtrl,
                       decoration: InputDecoration(
-                        labelText: 'Adresse e-mail',
-                        hintText: 'votre@email.com',
+                        labelText: loc.translate('email_label'),
+                        hintText: loc.translate('email_hint'),
                         prefixIcon: const Icon(Icons.email_outlined),
                       ),
                       keyboardType: TextInputType.emailAddress,
                       validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'E-mail requis'
-                          : (!v.contains('@') ? 'E-mail invalide' : null),
+                          ? loc.translate('email_required')
+                          : (!v.contains('@') ? loc.translate('email_invalid') : null),
                     ),
                     const SizedBox(height: 16),
                     // Mot de passe avec toggle
                     TextFormField(
                       controller: _pwdCtrl,
                       decoration: InputDecoration(
-                        labelText: 'Mot de passe',
-                        hintText: '••••••••',
+                        labelText: loc.translate('password_label'),
+                        hintText: loc.translate('password_hint'),
                         prefixIcon: const Icon(Icons.lock_outlined),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -179,15 +201,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       obscureText: !_showPassword,
-                      validator: (v) => (v == null || v.trim().length < 6)
-                          ? '6 caractères minimum'
+                      validator: (v) => (v == null || v.trim().length < 7)
+                          ? loc.translate('password_min')
                           : null,
                     ),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
-                        child: const Text('Mot de passe oublié ?'),
+                        child: Text(loc.translate('forgot_password')),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -195,25 +217,25 @@ class _LoginScreenState extends State<LoginScreen> {
                     ElevatedButton.icon(
                       onPressed: _loginEmail,
                       icon: const Icon(Icons.login),
-                      label: const Text('Se connecter'),
+                      label: Text(loc.translate('login_button')),
                     ),
                     const SizedBox(height: 12),
                     // Bouton Google
                     OutlinedButton.icon(
                       onPressed: _loginGoogle,
                       icon: const Icon(FontAwesomeIcons.google),
-                      label: const Text('Continuer avec Google'),
+                      label: Text(loc.translate('google_login')),
                     ),
                     const SizedBox(height: 24),
                     // Lien inscription
                     Column(
                       children: [
-                        const Text("Vous n'avez pas de compte ?"),
+                        Text(loc.translate('no_account')),
                         TextButton(
                           onPressed: () => Navigator.pushNamed(context, '/signup'),
-                          child: const Text(
-                            'Inscrivez-vous',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          child: Text(
+                            loc.translate('signup_link'),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],

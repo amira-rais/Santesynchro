@@ -20,4 +20,5 @@ if (!admin.apps.length) {
 // Exportation de l'instance Firestore et Auth pour utilisation dans l'application
 export const db = admin.firestore();
 export const authAdmin = admin.auth();
+export const storage = admin.storage();
 export default admin;

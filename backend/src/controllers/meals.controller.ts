@@ -9,6 +9,10 @@ import { Meal, MealType } from "../models/meal.model";
 
 
 // Contrôleur pour ajouter un nouveau repas
+/**
+ * Ajoute un nouveau repas pour l'utilisateur connecté.
+ * Les données sont stockées dans une sous-collection 'meals' propre à l'utilisateur.
+ */
 export const addMeal = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
@@ -57,6 +61,9 @@ export const addMeal = async (req: Request, res: Response) => {
 };
 
 // Contrôleur pour récupérer tous les repas d'un utilisateur
+/**
+ * Récupère la liste chronologique inverse de tous les repas de l'utilisateur.
+ */
 export const getMeals = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
@@ -88,6 +95,9 @@ export const getMeals = async (req: Request, res: Response) => {
 };
 
 // Contrôleur pour récupérer un repas par son ID
+/**
+ * Récupère les détails d'un repas spécifique via son ID.
+ */
 export const getMealById = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
@@ -119,6 +129,9 @@ export const getMealById = async (req: Request, res: Response) => {
 };
 
 // Contrôleur pour mettre à jour un repas existant
+/**
+ * Met à jour partiellement les informations d'un repas.
+ */
 export const updateMeal = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
@@ -161,6 +174,9 @@ export const updateMeal = async (req: Request, res: Response) => {
 };
 
 // Contrôleur pour supprimer un repas
+/**
+ * Supprime définitivement un repas de la base de données.
+ */
 export const deleteMeal = async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;

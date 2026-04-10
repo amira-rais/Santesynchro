@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:frontend/core/theme_provider.dart';
+import 'package:frontend/core/language_provider.dart';
+import 'package:frontend/core/app_localizations.dart';
 import 'package:frontend/services/api.dart';
 import 'package:frontend/shared/password_validator.dart';
 
@@ -53,10 +55,11 @@ class _SignupScreenState extends State<SignupScreen> {
   Future<void> _signupEmail() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
+    final loc = AppLocalizations.of(context);
     try {
       // Vérifie que les deux mots de passe correspondent
       if (_pwdCtrl.text.trim() != _pwd2Ctrl.text.trim()) {
-        throw Exception('Les mots de passe ne correspondent pas');
+        throw Exception(loc.translate('passwords_dont_match'));
       }
       // Crée le compte utilisateur avec Firebase Auth
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
@@ -71,7 +74,7 @@ class _SignupScreenState extends State<SignupScreen> {
       Navigator.pushReplacementNamed(context, '/verify-email');
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? 'Inscription échouée')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? loc.translate('signup_failed'))));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -105,11 +108,20 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    final langProvider = LanguageProvider();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inscription'),
+        title: Text(loc.translate('signup_title')),
         elevation: 0,
         actions: [
+          IconButton(
+            icon: Text(
+              langProvider.currentLocaleCode == 'fr' ? '🇫🇷' : '🇬🇧',
+              style: const TextStyle(fontSize: 22),
+            ),
+            onPressed: () => langProvider.toggleLanguage(),
+          ),
           IconButton(
             icon: Icon(
               widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
@@ -146,16 +158,16 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          const Text(
-                            'Créer un compte',
-                            style: TextStyle(
+                          Text(
+                            loc.translate('signup_header'),
+                            style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Commencez votre suivi de santé',
+                            loc.translate('signup_subtitle'),
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[600],
@@ -169,25 +181,25 @@ class _SignupScreenState extends State<SignupScreen> {
                     TextFormField(
                       controller: _nameCtrl,
                       decoration: InputDecoration(
-                        labelText: 'Nom complet',
-                        hintText: 'Jean Dupont',
+                        labelText: loc.translate('name_label'),
+                        hintText: loc.translate('name_hint'),
                         prefixIcon: const Icon(Icons.person_outline),
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty) ? loc.translate('name_required') : null,
                     ),
                     const SizedBox(height: 16),
                     // Email
                     TextFormField(
                       controller: _emailCtrl,
                       decoration: InputDecoration(
-                        labelText: 'Adresse e-mail',
-                        hintText: 'votre@email.com',
+                        labelText: loc.translate('email_label'),
+                        hintText: loc.translate('email_hint'),
                         prefixIcon: const Icon(Icons.email_outlined),
                       ),
                       keyboardType: TextInputType.emailAddress,
                       validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'E-mail requis'
-                          : (!v.contains('@') ? 'E-mail invalide' : null),
+                          ? loc.translate('email_required')
+                          : (!v.contains('@') ? loc.translate('email_invalid') : null),
                     ),
                     const SizedBox(height: 16),
                     // Mot de passe
@@ -195,8 +207,8 @@ class _SignupScreenState extends State<SignupScreen> {
                       controller: _pwdCtrl,
                       focusNode: _pwdFocus,
                       decoration: InputDecoration(
-                        labelText: 'Mot de passe',
-                        hintText: '••••••••',
+                        labelText: loc.translate('password_label'),
+                        hintText: loc.translate('password_hint'),
                         prefixIcon: const Icon(Icons.lock_outlined),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -206,8 +218,8 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
                       obscureText: !_showPassword,
-                      validator: (v) => (v == null || v.trim().length < 6)
-                          ? '6 caractères minimum'
+                      validator: (v) => (v == null || v.trim().length < 7)
+                          ? loc.translate('password_min')
                           : null,
                     ),
                     PasswordValidationWidget(
@@ -224,8 +236,8 @@ class _SignupScreenState extends State<SignupScreen> {
                     TextFormField(
                       controller: _pwd2Ctrl,
                       decoration: InputDecoration(
-                        labelText: 'Confirmer le mot de passe',
-                        hintText: '••••••••',
+                        labelText: loc.translate('confirm_password_label'),
+                        hintText: loc.translate('password_hint'),
                         prefixIcon: const Icon(Icons.lock_outlined),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -236,7 +248,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       obscureText: !_showPassword2,
                       validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Confirmez le mot de passe'
+                          ? loc.translate('confirm_password')
                           : null,
                     ),
                     const SizedBox(height: 24),
@@ -244,21 +256,21 @@ class _SignupScreenState extends State<SignupScreen> {
                     ElevatedButton.icon(
                       onPressed: _passwordValid ? _signupEmail : null,
                       icon: const Icon(Icons.person_add),
-                      label: const Text("S'inscrire"),
+                      label: Text(loc.translate('signup_button') == 'signup_button' ? "S'inscrire" : loc.translate('signup_button')),
                     ),
                     const SizedBox(height: 12),
                     // Bouton Google
                     OutlinedButton.icon(
                       onPressed: _signupGoogle,
                       icon: const Icon(FontAwesomeIcons.google),
-                      label: const Text('Continuer avec Google'),
+                      label: Text(loc.translate('google_login')),
                     ),
                     const SizedBox(height: 24),
                     // Lien connexion
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text('Déjà un compte ?'),
+                        Text(loc.translate('already_have_account')),
                         TextButton(
                           onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
                           style: TextButton.styleFrom(
@@ -266,9 +278,9 @@ class _SignupScreenState extends State<SignupScreen> {
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: const Text(
-                            'Connectez-vous',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          child: Text(
+                            loc.translate('login_link'),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],

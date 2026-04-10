@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 /// En dev USB avec `adb reverse`, BASE_URL = 127.0.0.1
 /// En Wi‑Fi, lance avec: flutter run --dart-define=API_BASE=http://192.168.x.x:4000
@@ -36,6 +37,13 @@ class Api {
     final r = await http.get(Uri.parse('$BASE_URL/auth/me'), headers: h);
     if (r.statusCode != 200) throw Exception('auth/me ${r.statusCode}: ${r.body}');
     return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  /// Met à jour le profil de l'utilisateur
+  static Future<void> updateProfile(Map<String, dynamic> body) async {
+    final h = await _headers();
+    final r = await http.put(Uri.parse('$BASE_URL/auth/me'), headers: h, body: jsonEncode(body));
+    if (r.statusCode != 200) throw Exception('PUT /auth/me ${r.statusCode}: ${r.body}');
   }
 
   // ============================================
@@ -154,5 +162,65 @@ class Api {
     if (r.statusCode != 200) {
       throw Exception(jsonDecode(r.body)['message'] ?? 'Erreur lors de la réinitialisation');
     }
+  }
+
+  // ============================================
+  // Hydratation (Water)
+  // ============================================
+
+  /// Ajoute une consommation d'eau (par défaut 250ml)
+  static Future<Map<String, dynamic>> addWater({int amount = 250}) async {
+    final h = await _headers();
+    final r = await http.post(
+      Uri.parse('$BASE_URL/water'),
+      headers: h,
+      body: jsonEncode({'amount': amount}),
+    );
+    if (r.statusCode != 201) throw Exception('POST /water ${r.statusCode}: ${r.body}');
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  /// Récupère l'hydratation d'aujourd'hui
+  static Future<Map<String, dynamic>> getWaterToday() async {
+    final h = await _headers();
+    final r = await http.get(Uri.parse('$BASE_URL/water/today'), headers: h);
+    if (r.statusCode != 200) throw Exception('GET /water/today ${r.statusCode}: ${r.body}');
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  // ============================================
+  // Données vitales (Vitals - Steps, Sleep)
+  // ============================================
+
+  /// Met à jour les vitaux d'aujourd'hui
+  static Future<Map<String, dynamic>> updateVitals(Map<String, dynamic> body) async {
+    final h = await _headers();
+    final r = await http.put(
+      Uri.parse('$BASE_URL/vitals'),
+      headers: h,
+      body: jsonEncode(body),
+    );
+    if (r.statusCode != 200) throw Exception('PUT /vitals ${r.statusCode}: ${r.body}');
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  /// Récupère les vitaux d'aujourd'hui
+  static Future<Map<String, dynamic>> getVitalsToday() async {
+    final h = await _headers();
+    final r = await http.get(Uri.parse('$BASE_URL/vitals/today'), headers: h);
+    if (r.statusCode != 200) throw Exception('GET /vitals/today ${r.statusCode}: ${r.body}');
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  // ============================================
+  // Dashboard
+  // ============================================
+
+  /// Récupère toutes les données agrégées pour le tableau de bord
+  static Future<Map<String, dynamic>> getDashboard() async {
+    final h = await _headers();
+    final r = await http.get(Uri.parse('$BASE_URL/dashboard'), headers: h);
+    if (r.statusCode != 200) throw Exception('GET /dashboard ${r.statusCode}: ${r.body}');
+    return jsonDecode(r.body) as Map<String, dynamic>;
   }
 }

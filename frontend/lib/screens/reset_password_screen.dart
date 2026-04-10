@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/core/theme_provider.dart';
+import 'package:frontend/core/language_provider.dart';
+import 'package:frontend/core/app_localizations.dart';
 import 'package:frontend/services/api.dart';
 import 'package:frontend/shared/password_validator.dart';
 
@@ -72,8 +74,29 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    final langProvider = LanguageProvider();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Nouveau mot de passe')),
+      appBar: AppBar(
+        title: Text(loc.translate('reset_password_title')),
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: Text(
+              langProvider.currentLocaleCode == 'fr' ? '🇫🇷' : '🇬🇧',
+              style: const TextStyle(fontSize: 22),
+            ),
+            onPressed: () => langProvider.toggleLanguage(),
+          ),
+          IconButton(
+            icon: Icon(
+              widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+            ),
+            onPressed: () => widget.themeProvider.toggleDarkMode(),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -84,10 +107,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 20),
-                    const Text(
-                      'Définissez votre nouveau mot de passe',
+                    Text(
+                      loc.translate('reset_password_title'),
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 32),
                     TextFormField(
@@ -95,7 +118,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       focusNode: _pwdFocus,
                       obscureText: !_showPassword,
                       decoration: InputDecoration(
-                        labelText: 'Nouveau mot de passe',
+                        labelText: loc.translate('new_password_label'),
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           icon: Icon(_showPassword ? Icons.visibility : Icons.visibility_off),
@@ -117,7 +140,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       controller: _confirmPwdCtrl,
                       obscureText: !_showPassword,
                       decoration: InputDecoration(
-                        labelText: 'Confirmez le mot de passe',
+                        labelText: loc.translate('confirm_password_label'),
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: _confirmPwdCtrl.text.isEmpty
                             ? null
