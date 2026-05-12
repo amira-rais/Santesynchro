@@ -1,11 +1,12 @@
 // lib/screens/edit_meal_screen.dart
 import 'package:flutter/material.dart';
 import 'package:frontend/services/api.dart';
+import 'package:frontend/core/app_localizations.dart';
 
 /// Écran pour modifier un repas existant
 /// Permet à l'utilisateur de changer les détails d'un repas
 class EditMealScreen extends StatefulWidget {
-  /// Le repas à modifier (reçu de MealsScreen)
+  /// Le repas à modifier (reçu de InsightsScreen)
   final Map<String, dynamic> meal;
   
   const EditMealScreen({super.key, required this.meal});
@@ -36,13 +37,10 @@ class _EditMealScreenState extends State<EditMealScreen> {
     'snack': Icons.cake,
   };
 
-  /// Mappe each meal type à son label en français
-  final _mealLabels = {
-    'breakfast': 'Petit-déjeuner',
-    'lunch': 'Déjeuner',
-    'dinner': 'Dîner',
-    'snack': 'Snack',
-  };
+  /// Mappe each meal type à son label localisé
+  String _getMealLabel(String type) {
+    return AppLocalizations.of(context).translate(type);
+  }
 
   @override
   void initState() {
@@ -84,7 +82,7 @@ class _EditMealScreenState extends State<EditMealScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Mise à jour échouée: $e')),
+        SnackBar(content: Text('${AppLocalizations.of(context).translate('update_failed')}: $e')),
       );
     }
   }
@@ -100,7 +98,7 @@ class _EditMealScreenState extends State<EditMealScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Modifier le repas'),
+        title: Text(AppLocalizations.of(context).translate('edit_meal_title')),
         elevation: 0,
       ),
       body: _saving
@@ -124,9 +122,9 @@ class _EditMealScreenState extends State<EditMealScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Enregistré le',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                          Text(
+                            AppLocalizations.of(context).translate('recorded_on'),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -141,15 +139,15 @@ class _EditMealScreenState extends State<EditMealScreen> {
                     TextFormField(
                       controller: _nameCtrl,
                       decoration: InputDecoration(
-                        labelText: 'Nom du repas',
+                        labelText: AppLocalizations.of(context).translate('meal_name_label'),
                         prefixIcon: const Icon(Icons.restaurant_menu),
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty) ? AppLocalizations.of(context).translate('name_required') : null,
                     ),
                     const SizedBox(height: 24),
                     // Type de repas
                     Text(
-                      'Type de repas',
+                      AppLocalizations.of(context).translate('meal_type'),
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
@@ -173,12 +171,12 @@ class _EditMealScreenState extends State<EditMealScreen> {
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: isSelected
-                                      ? const Color(0xFF10B981)
+                                      ? const Color(0xFF1DB954)
                                       : Colors.grey[300]!,
                                   width: isSelected ? 2 : 1,
                                 ),
                                 color: isSelected
-                                    ? const Color(0xFF10B981).withOpacity(0.1)
+                                    ? const Color(0xFF1DB954).withOpacity(0.1)
                                     : Colors.transparent,
                               ),
                               child: Column(
@@ -188,19 +186,19 @@ class _EditMealScreenState extends State<EditMealScreen> {
                                     _mealIcons[type],
                                     size: 32,
                                     color: isSelected
-                                        ? const Color(0xFF10B981)
+                                        ? const Color(0xFF1DB954)
                                         : Colors.grey,
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    _mealLabels[type] ?? '',
+                                    _getMealLabel(type),
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontWeight: isSelected
                                           ? FontWeight.w600
                                           : FontWeight.normal,
                                       color: isSelected
-                                          ? const Color(0xFF10B981)
+                                          ? const Color(0xFF1DB954)
                                           : Colors.grey[700],
                                     ),
                                   ),
@@ -221,11 +219,11 @@ class _EditMealScreenState extends State<EditMealScreen> {
                             controller: _qtyCtrl,
                             keyboardType: TextInputType.number,
                             decoration: InputDecoration(
-                              labelText: 'Quantité',
+                              labelText: AppLocalizations.of(context).translate('quantity_label'),
                               prefixIcon: const Icon(Icons.scale),
                             ),
                             validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'Requise'
+                                ? AppLocalizations.of(context).translate('required')
                                 : null,
                           ),
                         ),
@@ -235,7 +233,7 @@ class _EditMealScreenState extends State<EditMealScreen> {
                           child: DropdownButtonFormField<String>(
                             value: _unit,
                             items: [
-                              const DropdownMenuItem(value: null, child: Text('Unité')),
+                              DropdownMenuItem(value: null, child: Text(AppLocalizations.of(context).translate('unit_label'))),
                               const DropdownMenuItem(value: 'g', child: Text('g')),
                               const DropdownMenuItem(value: 'ml', child: Text('ml')),
                               const DropdownMenuItem(value: 'pieces', child: Text('pcs')),
@@ -254,14 +252,14 @@ class _EditMealScreenState extends State<EditMealScreen> {
                     ElevatedButton.icon(
                       onPressed: _save,
                       icon: const Icon(Icons.save),
-                      label: const Text('Enregistrer les modifications'),
+                      label: Text(AppLocalizations.of(context).translate('save_changes')),
                     ),
                     const SizedBox(height: 12),
                     // Bouton annuler
                     OutlinedButton.icon(
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.close),
-                      label: const Text('Annuler'),
+                      label: Text(AppLocalizations.of(context).translate('cancel')),
                     ),
                   ],
                 ),

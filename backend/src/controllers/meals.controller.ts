@@ -15,13 +15,13 @@ import { Meal, MealType } from "../models/meal.model";
  */
 export const addMeal = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
-    const { name, type, quantity, unit, nutrition } = req.body;
+    const uid = (req as any).user?.uid;
+    const { name, type, quantity, unit, nutrition, time, imageUrl } = req.body;
 
     // Vérification des champs obligatoires
-    if (!name || !type || !quantity) {
+    if (!name || !type || !quantity || !time) {
       return res.status(400).json({
-        message: "name, type and quantity are required",
+        message: "name, type, quantity and time are required",
       });
     }
 
@@ -29,15 +29,16 @@ export const addMeal = async (req: Request, res: Response) => {
     const mealId = uuidv4();
 
     // Construction des données du repas
-    const mealData = {
+    const mealData: Meal = {
       id: mealId,
       name,
       type,
       quantity,
       unit: unit ?? null,
-      nutrition: nutrition ?? null,
+      nutrition: nutrition || null,
+      time,
       createdAt: new Date().toISOString(),
-      source: "manual",
+      imageUrl: imageUrl || null,
     };
 
     // Référence au document du repas dans Firestore
@@ -66,7 +67,7 @@ export const addMeal = async (req: Request, res: Response) => {
  */
 export const getMeals = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
 
     // Référence à la collection des repas, triée par date décroissante
     const mealsRef = db
@@ -100,7 +101,7 @@ export const getMeals = async (req: Request, res: Response) => {
  */
 export const getMealById = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const mealId = req.params.id as string;
 
     // Référence au document du repas dans Firestore
@@ -134,7 +135,7 @@ export const getMealById = async (req: Request, res: Response) => {
  */
 export const updateMeal = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const mealId = req.params.id as string;
     const updates = req.body;
 
@@ -179,7 +180,7 @@ export const updateMeal = async (req: Request, res: Response) => {
  */
 export const deleteMeal = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const mealId = req.params.id as string;
 
     // Référence au document du repas dans Firestore

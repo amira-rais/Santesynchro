@@ -9,10 +9,16 @@ import 'package:frontend/screens/login_screen.dart';
 import 'package:frontend/screens/signup_screen.dart';
 import 'package:frontend/screens/home_screen.dart';
 import 'package:frontend/screens/goals_screen.dart';
-import 'package:frontend/screens/meals_screen.dart';
+import 'package:frontend/screens/insights_screen.dart';
 import 'package:frontend/screens/verify_email_screen.dart';
 import 'package:frontend/screens/forgot_password_screen.dart';
 import 'package:frontend/screens/reset_password_screen.dart';
+import 'package:frontend/screens/edit_profile_screen.dart';
+import 'package:frontend/services/hive_service.dart';
+import 'package:frontend/services/step_service.dart';
+import 'package:frontend/services/sleep_service.dart';
+import 'package:frontend/services/sync_service.dart';
+import 'package:frontend/services/analytics_service.dart';
 
 /// Point d'entrée de l'application
 void main() async {
@@ -30,6 +36,9 @@ void main() async {
     // Initialise Firebase (authentification, etc.)
     await Firebase.initializeApp();
 
+    // Initialise le stockage local Hive (doit être avant les services)
+    await HiveService.init();
+
     // Initialise le gestionnaire de thème
     final themeProvider = ThemeProvider();
     await themeProvider.init();
@@ -37,6 +46,15 @@ void main() async {
     // Initialise le gestionnaire de langue
     final languageProvider = LanguageProvider();
     await languageProvider.init();
+
+    // Démarrer le compteur de pas en temps réel
+    await StepService().init();
+
+    // Démarrer la détection de sommeil semi-automatique
+    SleepService().start();
+
+    // Démarrer la synchronisation offline→backend
+    SyncService().start();
 
     // Lance l'application avec le thème et la langue providers
     runApp(SanteSynchroApp(themeProvider: themeProvider, languageProvider: languageProvider));
@@ -59,7 +77,7 @@ class SanteSynchroApp extends StatefulWidget {
   State<SanteSynchroApp> createState() => _SanteSynchroAppState();
 }
 
-class _SanteSynchroAppState extends State<SanteSynchroApp> {
+class _SanteSynchroAppState extends State<SanteSynchroApp> with WidgetsBindingObserver {
   late ThemeProvider _themeProvider;
   late LanguageProvider _languageProvider;
 
@@ -70,13 +88,26 @@ class _SanteSynchroAppState extends State<SanteSynchroApp> {
     _languageProvider = widget.languageProvider;
     _themeProvider.addListener(_refresh);
     _languageProvider.addListener(_refresh);
+    // Démarre le tracking de session dès l'ouverture
+    WidgetsBinding.instance.addObserver(this);
+    AnalyticsService.onAppResumed();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _themeProvider.removeListener(_refresh);
     _languageProvider.removeListener(_refresh);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      AnalyticsService.onAppResumed();
+    } else if (state == AppLifecycleState.paused) {
+      AnalyticsService.onAppPaused();
+    }
   }
 
   /// Callback appelé quand le thème ou la langue change
@@ -110,10 +141,11 @@ class _SanteSynchroAppState extends State<SanteSynchroApp> {
         '/signup': (_) => SignupScreen(themeProvider: _themeProvider),
         '/verify-email': (_) => VerifyEmailScreen(themeProvider: _themeProvider),
         '/home': (_) => HomeScreen(themeProvider: _themeProvider),
-        '/meals': (_) => MealsScreen(themeProvider: _themeProvider),
+        '/insights': (_) => InsightsScreen(themeProvider: _themeProvider),
         '/goals': (_) => GoalsScreen(themeProvider: _themeProvider),
         '/forgot-password': (_) => ForgotPasswordScreen(themeProvider: _themeProvider),
         '/reset-password': (_) => ResetPasswordScreen(themeProvider: _themeProvider),
+        '/edit-profile': (_) => EditProfileScreen(themeProvider: _themeProvider),
       },
     );
   }

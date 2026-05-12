@@ -8,7 +8,10 @@ import 'package:frontend/core/language_provider.dart';
 import 'package:frontend/core/app_localizations.dart';
 import 'package:frontend/screens/settings_screen.dart';
 import 'package:frontend/screens/add_meal_screen.dart';
+import 'package:frontend/screens/goals_screen.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:frontend/utils/nutrition_calculator.dart';
+import 'package:frontend/widgets/spotlight_clipper.dart';
 
 /// Écran de résumé du profil.
 /// Affiche les statistiques de l'utilisateur, ses objectifs et ses préférences santé.
@@ -58,14 +61,23 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
       setState(() {
         _photoUrl = me['photoUrl'];
         _data = {
+          'gender': me['gender']?.toString(),
+          'birthDate': me['birthDate']?.toString(),
           'goals': (me['goals'] as List? ?? []).map((g) => g['type'].toString()).toSet(),
           'height': double.tryParse(me['height']?.toString() ?? '175') ?? 175.0,
           'currentWeight': double.tryParse(me['weight']?.toString() ?? '75') ?? 75.0,
           'targetWeight': double.tryParse(me['targetWeight']?.toString() ?? '70') ?? 70.0,
           'pace': me['pace']?.toString() ?? 'Steady',
+          'activityLevel': me['activityLevel']?.toString() ?? 'moderate',
           'diets': (me['diets'] as List? ?? []).map((d) => d.toString()).toSet(),
           'conditions': (me['conditions'] as List? ?? []).map((c) => c.toString()).toSet(),
           'allergies': (me['allergies'] as List? ?? []).map((a) => a.toString()).toSet(),
+          'nutritionGoals': me['nutritionGoals'] ?? {
+            'calories': 2100,
+            'protein': 0,
+            'carbs': 0,
+            'fat': 0
+          },
         };
       });
     } catch (e) {
@@ -81,13 +93,17 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
     try {
       // 1. Prépare et envoie les métriques physiques
       final metrics = {
+        'gender': _data?['gender'],
+        'birthDate': _data?['birthDate'],
         'height': _data?['height'],
         'weight': _data?['currentWeight'],
         'targetWeight': _data?['targetWeight'],
         'pace': _data?['pace'],
+        'activityLevel': _data?['activityLevel'],
         'diets': (_data?['diets'] as Set<String>?)?.toList() ?? [],
         'conditions': (_data?['conditions'] as Set<String>?)?.toList() ?? [],
         'allergies': (_data?['allergies'] as Set<String>?)?.toList() ?? [],
+        'nutritionGoals': _data?['nutritionGoals'],
       };
       await Api.updateProfile(metrics);
 
@@ -103,7 +119,7 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
 
       if (!mounted) return;
       // Indique que l'onboarding est terminé en allant vers la page principale
-      Navigator.pushNamedAndRemoveUntil(context, '/meals', (route) => false);
+      Navigator.pushNamedAndRemoveUntil(context, '/insights', (route) => false);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -170,10 +186,12 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
         final isDark = widget.themeProvider.isDarkMode;
+        final theme = Theme.of(context);
         return Container(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            color: isDark ? theme.cardColor : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: isDark ? Border(top: BorderSide(color: theme.dividerColor)) : null,
           ),
           child: SafeArea(
             child: Wrap(
@@ -219,7 +237,7 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
     // État de chargement initial
     if (_loading || _data == null) {
       return Scaffold(
-        backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -234,21 +252,14 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
     final allergies = _data!['allergies'] as Set<String>;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(loc.translate('profile_summary_title'), style: const TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: Icon(
-              widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-            ),
-            onPressed: () => widget.themeProvider.toggleDarkMode(),
-          ),
-        ],
+        actions: [],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -296,7 +307,7 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              FirebaseAuth.instance.currentUser?.displayName ?? 'Nouvel Utilisateur',
+              FirebaseAuth.instance.currentUser?.displayName ?? loc.translate('new_user'),
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             Text(
@@ -306,19 +317,29 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
             const SizedBox(height: 32),
             
             // Section Mon Plan
-            _buildSectionHeader(loc.translate('my_plan'), onEdit: () {}, isDark: isDark),
+            _buildSectionHeader(loc.translate('my_plan'), onEdit: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => GoalsScreen(
+                    themeProvider: widget.themeProvider,
+                    isEditing: true,
+                  ),
+                ),
+              ).then((_) => _fetchProfile());
+            }, isDark: isDark),
             const SizedBox(height: 16),
             _buildPlanCard(primaryColor, isDark, goals, pace, currentWeight, targetWeight),
             
             const SizedBox(height: 32),
             // Section Objectifs Quotidiens
-            _buildSectionHeader(loc.translate('daily_targets'), isDark: isDark),
+            _buildSectionHeader(loc.translate('daily_targets') ?? 'Objectifs Quotidiens', isDark: isDark),
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: _buildTargetCard(loc.translate('energy'), '2,100', 'kcal / day', Icons.local_fire_department, Colors.orange, isDark)),
+                Expanded(child: _buildTargetCard(loc.translate('energy'), '${_data?['nutritionGoals']?['calories'] ?? 2100}', 'kcal / ${loc.translate('day').toLowerCase()}', Icons.local_fire_department, Colors.orange, isDark)),
                 const SizedBox(width: 16),
-                Expanded(child: _buildTargetCard(loc.translate('hydration'), '2.5', 'Liters / day', Icons.opacity, Colors.blue, isDark)),
+                Expanded(child: _buildTargetCard(loc.translate('hydration'), '2.5', 'Liters / ${loc.translate('day').toLowerCase()}', Icons.opacity, Colors.blue, isDark)),
               ],
             ),
             
@@ -335,33 +356,55 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
               runSpacing: 8,
               children: [
                 ...diets.map((d) => _buildDietChip(d, isDark, primaryColor)),
-                ...conditions.map((c) => _buildDietChip(c, isDark, primaryColor, isCondition: true)),
-                ...allergies.map((a) => _buildDietChip(a, isDark, primaryColor, isAllergy: true)),
+                ...conditions.map((c) => _buildDietChip(loc.translate(c + '_name') == c + '_name' ? c : loc.translate(c + '_name'), isDark, primaryColor, isCondition: true)),
+                ...allergies.map((a) => _buildDietChip(loc.translate(a + '_name') == a + '_name' ? a : loc.translate(a + '_name'), isDark, primaryColor, isAllergy: true)),
               ].isEmpty 
                 ? [Text(loc.translate('none') ?? 'Aucune préférence', style: TextStyle(color: Colors.grey[500]))]
                 : [
                     ...diets.map((d) => _buildDietChip(d, isDark, primaryColor)),
-                    ...conditions.map((c) => _buildDietChip(c, isDark, primaryColor, isCondition: true)),
-                    ...allergies.map((a) => _buildDietChip(a, isDark, primaryColor, isAllergy: true)),
+                    ...conditions.map((c) => _buildDietChip(loc.translate(c + '_name') == c + '_name' ? c : loc.translate(c + '_name'), isDark, primaryColor, isCondition: true)),
+                    ...allergies.map((a) => _buildDietChip(loc.translate(a + '_name') == a + '_name' ? a : loc.translate(a + '_name'), isDark, primaryColor, isAllergy: true)),
                   ],
             ),
             
             const SizedBox(height: 40),
+            if (widget.userData != null)
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _saveAndContinue,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
+                  ),
+                  child: _saving
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                        loc.translate('confirm_start'),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                ),
+              ),
             const SizedBox(height: 24),
           ],
         ),
       ),
 
       // Bottom Navigation Bar
-      bottomNavigationBar: Container(
+      bottomNavigationBar: widget.userData != null ? null : Container(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          color: isDark ? const Color(0xFF04120E) : Colors.white,
+          border: Border(top: BorderSide(color: isDark ? const Color(0xFF2A4A3F) : Colors.grey[200]!, width: 1)),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -4),
-            ),
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
           ],
         ),
         child: SafeArea(
@@ -370,17 +413,17 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(Icons.home_outlined, 'HOME', false, primaryColor, isDark, () {
+                _buildNavItem(Icons.home_rounded, 'HOME', false, primaryColor, isDark, () {
                   setState(() => _quickAddExpanded = false);
                   Navigator.pushReplacementNamed(context, '/home');
                 }),
-                _buildNavItem(Icons.insights_outlined, 'INSIGHTS', false, primaryColor, isDark, () {
+                _buildNavItem(Icons.insights_rounded, 'INSIGHTS', false, primaryColor, isDark, () {
                   setState(() => _quickAddExpanded = false);
-                  Navigator.pushReplacementNamed(context, '/meals');
+                  Navigator.pushReplacementNamed(context, '/insights');
                 }),
                 _buildPlusNavItem(primaryColor),
-                _buildNavItem(Icons.person, 'PROFILE', true, primaryColor, isDark, () {}),
-                _buildNavItem(Icons.settings_outlined, 'SETTINGS', false, primaryColor, isDark, () {
+                _buildNavItem(Icons.person_rounded, 'PROFILE', true, primaryColor, isDark, () {}),
+                _buildNavItem(Icons.settings_rounded, 'SETTINGS', false, primaryColor, isDark, () {
                   setState(() => _quickAddExpanded = false);
                   Navigator.pushReplacement(
                     context,
@@ -475,9 +518,10 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: primaryColor.withOpacity(0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+                      color: primaryColor.withOpacity(0.4),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 0),
                     ),
                   ],
                 ),
@@ -507,6 +551,8 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
     required VoidCallback onTap,
   }) {
     final bool usingLeft = expandedLeft != null;
+    final theme = Theme.of(context);
+    final isDark = widget.themeProvider.isDarkMode;
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 500),
       curve: Curves.easeInOutCubic,
@@ -526,12 +572,12 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: highlighted ? color.withOpacity(0.12) : Colors.white,
+                color: highlighted ? color.withOpacity(0.12) : (isDark ? theme.cardColor : Colors.white),
                 shape: BoxShape.circle,
-                border: Border.all(color: highlighted ? color : color.withOpacity(0.35), width: highlighted ? 2 : 1),
+                border: Border.all(color: highlighted ? color : (isDark ? theme.dividerColor : color.withOpacity(0.2)), width: highlighted ? 2 : 1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.16),
+                    color: Colors.black.withOpacity(0.08),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),
@@ -601,26 +647,65 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
 
   /// Widget utilitaire pour les icônes de navigation basse
   Widget _buildNavItem(IconData icon, String label, bool isActive, Color primaryColor, bool isDark, VoidCallback onTap) {
+    final Color spotlightColor = isDark ? Colors.white : primaryColor;
+    
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isActive ? primaryColor : Colors.grey,
-            size: 26,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-              color: isActive ? primaryColor : Colors.grey,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 60,
+        height: 50,
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            if (isActive)
+              Positioned(
+                top: -12,
+                child: Column(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: spotlightColor,
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(4)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: spotlightColor.withOpacity(0.5),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ClipPath(
+                      clipper: SpotlightClipper(),
+                      child: Container(
+                        width: 56,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              spotlightColor.withOpacity(0.25),
+                              spotlightColor.withOpacity(0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Icon(
+              icon,
+              color: isActive ? spotlightColor : (isDark ? Colors.grey[600] : const Color(0xFF1E1E1E).withOpacity(0.5)),
+              size: 30,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -630,11 +715,11 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        Expanded(child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
         if (onEdit != null)
           TextButton(
             onPressed: onEdit,
-            child: const Text('Edit', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(AppLocalizations.of(context).translate('edit'), style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
       ],
     );
@@ -642,21 +727,17 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
 
   /// Construit la carte d'affichage de la progression vers l'objectif de poids
   Widget _buildPlanCard(Color primaryColor, bool isDark, Set<String> goals, String pace, double current, double target) {
-    String title = goals.contains('weight_loss') ? 'Weight Loss' : 'Healthy Lifestyle';
+    String title = goals.contains('weight_loss') 
+      ? AppLocalizations.of(context).translate('weight_loss') 
+      : AppLocalizations.of(context).translate('lifestyle');
     IconData icon = goals.contains('weight_loss') ? Icons.trending_down : Icons.favorite_border;
     
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: isDark ? Theme.of(context).dividerColor : Theme.of(context).dividerColor.withOpacity(0.5)),
       ),
       child: Column(
         children: [
@@ -677,7 +758,7 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
                   children: [
                     Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     Text(
-                      '$pace Pace • ${pace == "Fast" ? "1.0kg" : (pace == "Steady" ? "0.5kg" : "0.25kg")} per week',
+                      '${AppLocalizations.of(context).translate(pace.toLowerCase())} ${AppLocalizations.of(context).translate('choose_pace')} • ${pace == "Fast" ? "1.0kg" : (pace == "Steady" ? "0.5kg" : "0.25kg")} ${AppLocalizations.of(context).translate('per_week')}',
                       style: TextStyle(color: Colors.grey[600], fontSize: 13),
                     ),
                   ],
@@ -689,7 +770,7 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('PROGRESS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              Text(AppLocalizations.of(context).translate('progress'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
               Text('0%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryColor)),
             ],
           ),
@@ -705,7 +786,9 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Target weight: ${target.toInt()}kg (Current: ${current.toInt()}kg)',
+            AppLocalizations.of(context).translate('target_weight_with_current')
+              .replaceAll('{target}', target.toInt().toString())
+              .replaceAll('{current}', current.toInt().toString()),
             style: TextStyle(color: Colors.grey[400], fontSize: 12),
           ),
         ],
@@ -718,15 +801,9 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: isDark ? Theme.of(context).dividerColor : Theme.of(context).dividerColor.withOpacity(0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -735,7 +812,13 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
             children: [
               Icon(icon, color: color, size: 18),
               const SizedBox(width: 8),
-              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              Expanded(
+                child: Text(
+                  label, 
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -752,15 +835,9 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: isDark ? Theme.of(context).dividerColor : Theme.of(context).dividerColor.withOpacity(0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -769,7 +846,13 @@ class _ProfileSummaryScreenState extends State<ProfileSummaryScreen> {
             children: [
               Icon(Icons.donut_large, color: primaryColor, size: 18),
               const SizedBox(width: 8),
-              Text(loc.translate('macronutrients').toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              Expanded(
+                child: Text(
+                  loc.translate('macronutrients').toUpperCase(), 
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),

@@ -8,7 +8,7 @@ import { db } from "../config/firebase";
  */
 export const updateVitals = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const { steps, stepsGoal, sleepDuration, sleepQuality } = req.body;
 
     const today = new Date().toISOString().split("T")[0];
@@ -44,7 +44,7 @@ export const updateVitals = async (req: Request, res: Response) => {
  */
 export const getVitalsToday = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const today = new Date().toISOString().split("T")[0];
 
     const vitalsRef = db

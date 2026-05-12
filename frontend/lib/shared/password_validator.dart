@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/core/app_localizations.dart';
 
 class PasswordValidationWidget extends StatelessWidget {
   final String password;
@@ -39,10 +40,10 @@ class PasswordValidationWidget extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          _buildConditionItem("Au moins 7 caractères", hasMinLength),
-          _buildConditionItem("Majuscule et minuscule", hasMixedCase),
-          _buildConditionItem("Au moins un chiffre", hasDigit),
-          _buildConditionItem("Caractère spécial (# & @ _ ! * \$ % .)", hasSpecialChar),
+          _buildConditionItem(AppLocalizations.of(context).translate('pwd_min_length'), hasMinLength),
+          _buildConditionItem(AppLocalizations.of(context).translate('pwd_mixed_case'), hasMixedCase),
+          _buildConditionItem(AppLocalizations.of(context).translate('pwd_digit'), hasDigit),
+          _buildConditionItem(AppLocalizations.of(context).translate('pwd_special'), hasSpecialChar),
         ],
       ),
     );

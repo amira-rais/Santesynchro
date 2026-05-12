@@ -12,7 +12,7 @@ import { db } from "../config/firebase";
  */
 export const getDashboard = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const today = new Date().toISOString().split("T")[0];
 
     // 1. Récupérer les infos utilisateur
@@ -43,11 +43,12 @@ export const getDashboard = async (req: Request, res: Response) => {
     });
 
     // Objectifs nutritionnels par défaut ou depuis le profil
-    const nutritionGoals = userData.nutritionGoals ?? {
-      calories: 2100,
-      protein: 160,
-      carbs: 250,
-      fat: 70,
+    const dbGoals = userData.nutritionGoals || {};
+    const nutritionGoals = {
+      calories: dbGoals.calories || 2100,
+      protein: dbGoals.protein || 160,
+      carbs: dbGoals.carbs || 250,
+      fat: dbGoals.fat || 70,
     };
 
     // 3. Récupérer l'hydratation du jour
@@ -119,7 +120,15 @@ export const getDashboard = async (req: Request, res: Response) => {
       });
     }
 
-    // 6. Construire la réponse
+    // 6. Récupérer les repas du jour pour le timeline (déjà récupérés en étape 2, mais on veut les données brutes)
+    const todayMeals: any[] = [];
+    mealsSnapshot.forEach((doc) => {
+      todayMeals.push(doc.data());
+    });
+    // Trier par date croissante (plus ancien en haut)
+    todayMeals.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    // 7. Construire la réponse
     return res.status(200).json({
       user: {
         name: userData.name ?? "User",
@@ -145,6 +154,7 @@ export const getDashboard = async (req: Request, res: Response) => {
         sleepQuality: vitals?.sleepQuality ?? 0,
       },
       insights,
+      todayMeals,
     });
   } catch (err) {
     console.error("Error fetching dashboard:", err);

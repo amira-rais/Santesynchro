@@ -6,7 +6,9 @@ import 'package:frontend/screens/profile_summary_screen.dart';
 import 'package:frontend/screens/add_meal_screen.dart';
 import 'package:frontend/core/language_provider.dart';
 import 'package:frontend/core/app_localizations.dart';
+import 'package:frontend/services/api.dart';
 import 'package:frontend/services/health_service.dart';
+import 'package:frontend/widgets/spotlight_clipper.dart';
 
 /// Écran des réglages de l'application.
 /// Permet à l'utilisateur de se déconnecter, de supprimer son compte et de changer la langue.
@@ -38,7 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!mounted) return;
         setState(() => _healthConnectEnabled = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Health Connect non disponible sur cet appareil.')),
+          SnackBar(content: Text(AppLocalizations.of(context).translate('health_connect_not_available'))),
         );
         return;
       }
@@ -48,7 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!mounted) return;
         setState(() => _healthConnectEnabled = ok);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ok ? 'Health Connect connecte.' : 'Acces Health Connect refuse.')),
+          SnackBar(content: Text(ok ? AppLocalizations.of(context).translate('health_connect_connected') : AppLocalizations.of(context).translate('health_connect_denied'))),
         );
       } else {
         if (!mounted) return;
@@ -98,6 +100,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirm == true) {
       // Si l'utilisateur confirme la suppression
       try {
+        // 1. Supprimer les données de la base de données via le backend
+        await Api.deleteAccount();
+        
+        // 2. Supprimer l'utilisateur de Firebase Auth
         await FirebaseAuth.instance.currentUser?.delete();
         if (!context.mounted) return;
         Navigator.pushAndRemoveUntil(
@@ -120,6 +126,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Récupère les localisations pour les textes traduits.
     final loc = AppLocalizations.of(context);
     // Récupère le fournisseur de langue pour changer la langue.
+    final isDark = widget.themeProvider.isDarkMode;
+    final primaryColor = Theme.of(context).primaryColor;
     final langProvider = LanguageProvider();
 
     return Scaffold(
@@ -132,6 +140,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          ListTile(
+            leading: Icon(Icons.person_outline, color: primaryColor),
+            title: const Text('Informations personnelles'),
+            subtitle: const Text('Nom, Sexe, Âge, Taille, Poids'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () => Navigator.pushNamed(context, '/edit-profile'),
+          ),
+          const Divider(),
+          ListTile(
+            leading: Icon(Icons.dark_mode, color: isDark ? primaryColor : Colors.grey),
+            title: Text(loc.translate('dark_mode')),
+            trailing: Switch(
+              value: widget.themeProvider.isDarkMode,
+              onChanged: (v) => widget.themeProvider.toggleDarkMode(),
+              activeColor: primaryColor,
+            ),
+            onTap: () => widget.themeProvider.toggleDarkMode(),
+          ),
+          const Divider(),
           /// Option pour changer la langue de l'application.
           ListTile(
             leading: const Icon(Icons.language, color: Colors.blue),
@@ -140,7 +167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // Affiche la langue actuelle avec un drapeau.
             trailing: Text(
               langProvider.currentLocaleCode == 'fr' ? '🇫🇷 Français' : '🇬🇧 English',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor),
             ),
             onTap: () => langProvider.toggleLanguage(),
           ),
@@ -150,8 +177,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Health Connect'),
             subtitle: Text(
               _healthConnectBusy
-                  ? 'Demande d\'acces en cours...'
-                  : 'Synchronisation Android Health Connect',
+                  ? loc.translate('health_connect_busy')
+                  : loc.translate('health_connect_sync'),
               maxLines: 2,
               softWrap: true,
               style: const TextStyle(fontSize: 12),
@@ -192,15 +219,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isDark = widget.themeProvider.isDarkMode;
     final primaryColor = Theme.of(context).primaryColor;
 
+    final navBg = isDark ? const Color(0xFF04120E) : Colors.white;
+    final topBorder = isDark ? const Color(0xFF2A4A3F) : Colors.grey[200]!;
+
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: navBg,
+        border: Border(top: BorderSide(color: topBorder, width: 1)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -4),
-          ),
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
         ],
       ),
       child: SafeArea(
@@ -209,23 +241,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(Icons.home_outlined, 'HOME', false, primaryColor, isDark, () {
+              _buildNavItem(Icons.home_rounded, 'HOME', false, primaryColor, isDark, () {
                 setState(() => _quickAddExpanded = false);
                 Navigator.pushReplacementNamed(context, '/home');
               }),
-              _buildNavItem(Icons.insights_outlined, 'INSIGHTS', false, primaryColor, isDark, () {
+              _buildNavItem(Icons.insights_rounded, 'INSIGHTS', false, primaryColor, isDark, () {
                 setState(() => _quickAddExpanded = false);
-                Navigator.pushReplacementNamed(context, '/meals');
+                Navigator.pushReplacementNamed(context, '/insights');
               }),
               _buildPlusNavItem(primaryColor),
-              _buildNavItem(Icons.person_outline, 'PROFILE', false, primaryColor, isDark, () {
+              _buildNavItem(Icons.person_rounded, 'PROFILE', false, primaryColor, isDark, () {
                 setState(() => _quickAddExpanded = false);
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (_) => ProfileSummaryScreen(themeProvider: widget.themeProvider)),
                 );
               }),
-              _buildNavItem(Icons.settings, 'SETTINGS', true, primaryColor, isDark, () {}),
+              _buildNavItem(Icons.settings_rounded, 'SETTINGS', true, primaryColor, isDark, () {}),
             ],
           ),
         ),
@@ -313,9 +345,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: primaryColor.withOpacity(0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+                      color: primaryColor.withOpacity(0.4),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 0),
                     ),
                   ],
                 ),
@@ -345,6 +378,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required VoidCallback onTap,
   }) {
     final bool usingLeft = expandedLeft != null;
+    final theme = Theme.of(context);
+    final isDark = widget.themeProvider.isDarkMode;
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 500),
       curve: Curves.easeInOutCubic,
@@ -364,9 +399,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: highlighted ? color.withOpacity(0.12) : Colors.white,
+                color: highlighted ? color.withOpacity(0.12) : (isDark ? theme.cardColor : Colors.white),
                 shape: BoxShape.circle,
-                border: Border.all(color: highlighted ? color : color.withOpacity(0.35), width: highlighted ? 2 : 1),
+                border: Border.all(color: highlighted ? color : (isDark ? theme.dividerColor : color.withOpacity(0.35)), width: highlighted ? 2 : 1),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.16),
@@ -445,26 +480,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool isDark,
     VoidCallback onTap,
   ) {
+    final Color spotlightColor = isDark ? Colors.white : primaryColor;
+    
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isActive ? primaryColor : Colors.grey,
-            size: 26,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-              color: isActive ? primaryColor : Colors.grey,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 60,
+        height: 50,
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            if (isActive)
+              Positioned(
+                top: -12,
+                child: Column(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: spotlightColor,
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(4)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: spotlightColor.withOpacity(0.5),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ClipPath(
+                      clipper: SpotlightClipper(),
+                      child: Container(
+                        width: 56,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              spotlightColor.withOpacity(0.25),
+                              spotlightColor.withOpacity(0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Icon(
+              icon,
+              color: isActive ? spotlightColor : (isDark ? Colors.grey[600] : const Color(0xFF1E1E1E).withOpacity(0.5)),
+              size: 30,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

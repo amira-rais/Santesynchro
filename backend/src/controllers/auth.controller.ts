@@ -11,7 +11,7 @@ import { User } from "../models/user.model";
 export const getMe = async (req: Request, res: Response) => {
   try {
     // Récupère les informations de l'utilisateur depuis le token
-    const decoded = req.user;
+    const decoded = (req as any).user;
     if (!decoded?.uid) {
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -71,7 +71,7 @@ export const getMe = async (req: Request, res: Response) => {
 // Contrôleur pour mettre à jour les informations de l'utilisateur
 export const updateMe = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     if (!uid) {
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -84,6 +84,37 @@ export const updateMe = async (req: Request, res: Response) => {
     return res.json({ message: "Profile updated successfully" });
   } catch (error) {
     console.error("Error in updateMe:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// Contrôleur pour supprimer les informations de l'utilisateur
+export const deleteMe = async (req: Request, res: Response) => {
+  try {
+    const uid = (req as any).user?.uid;
+    if (!uid) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const userRef = db.collection("users").doc(uid);
+
+    // Supprimer les sous-collections
+    const collections = ["goals", "meals", "water", "vitals"];
+    for (const collectionName of collections) {
+      const snap = await userRef.collection(collectionName).get();
+      if (!snap.empty) {
+        const batch = db.batch();
+        snap.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+      }
+    }
+
+    // Supprimer le document utilisateur
+    await userRef.delete();
+
+    return res.json({ message: "User data deleted successfully from database" });
+  } catch (error) {
+    console.error("Error in deleteMe:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

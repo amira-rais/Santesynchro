@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from "uuid";
  */
 export const addWater = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const { amount } = req.body;
 
     const waterAmount = amount ?? 250; // 250ml par défaut
@@ -44,7 +44,7 @@ export const addWater = async (req: Request, res: Response) => {
  */
 export const getWaterToday = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const today = new Date().toISOString().split("T")[0];
 
     const snapshot = await db

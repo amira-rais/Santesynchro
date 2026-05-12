@@ -1,5 +1,6 @@
 // lib/services/api.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -44,6 +45,13 @@ class Api {
     final h = await _headers();
     final r = await http.put(Uri.parse('$BASE_URL/auth/me'), headers: h, body: jsonEncode(body));
     if (r.statusCode != 200) throw Exception('PUT /auth/me ${r.statusCode}: ${r.body}');
+  }
+
+  /// Supprime le compte de l'utilisateur et ses données associées
+  static Future<void> deleteAccount() async {
+    final h = await _headers();
+    final r = await http.delete(Uri.parse('$BASE_URL/auth/me'), headers: h);
+    if (r.statusCode != 200) throw Exception('DELETE /auth/me ${r.statusCode}: ${r.body}');
   }
 
   // ============================================
@@ -223,4 +231,107 @@ class Api {
     if (r.statusCode != 200) throw Exception('GET /dashboard ${r.statusCode}: ${r.body}');
     return jsonDecode(r.body) as Map<String, dynamic>;
   }
+
+  // ============================================
+  // Insights & Progression
+  // ============================================
+
+  /// Récupère les données de progression sur les 7 derniers jours
+  static Future<List<dynamic>> getProgressionData() async {
+    final h = await _headers();
+    final r = await http.get(Uri.parse('$BASE_URL/insights/progression'), headers: h);
+    if (r.statusCode != 200) throw Exception('GET /insights/progression ${r.statusCode}: ${r.body}');
+    return jsonDecode(r.body) as List<dynamic>;
+  }
+
+  // ============================================
+  // Nutrition (Open Food Facts)
+  // ============================================
+
+  /// Cherche des produits alimentaires par nom.
+  /// ⚠️ Résultats approximatifs, non garantis.
+  static Future<List<dynamic>> searchProducts(String query) async {
+    final h = await _headers();
+    final r = await http.get(
+      Uri.parse('$BASE_URL/nutrition/search?q=${Uri.encodeQueryComponent(query)}'),
+      headers: h,
+    );
+    if (r.statusCode != 200) throw Exception('GET /nutrition/search ${r.statusCode}: ${r.body}');
+    return jsonDecode(r.body) as List<dynamic>;
+  }
+
+  /// Récupère un produit par son code-barres.
+  /// ✅ Résultat officiel et fiable.
+  static Future<Map<String, dynamic>?> getProductByBarcode(String barcode) async {
+    final h = await _headers();
+    final r = await http.get(
+      Uri.parse('$BASE_URL/nutrition/barcode/$barcode'),
+      headers: h,
+    );
+    if (r.statusCode == 404) return null;
+    if (r.statusCode != 200) throw Exception('GET /nutrition/barcode/$barcode ${r.statusCode}: ${r.body}');
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  /// Recognizes a food from an image and returns a list of labels (tags).
+  /// Uses the Clarifai API on the backend.
+  static Future<Map<String, dynamic>> analyzeFoodImage(File imageFile) async {
+    final token = await FirebaseAuth.instance.currentUser!.getIdToken();
+    final uri = Uri.parse('$BASE_URL/nutrition/analyze-image');
+
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(await http.MultipartFile.fromPath(
+      'image',
+      imageFile.path,
+      contentType: MediaType('image', 'jpeg'),
+    ));
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('POST /nutrition/analyze-image ${response.statusCode}: ${response.body}');
+    }
+  }
+
+  /// Recognizes a food from an image using local Ollama (LLaVA) API.
+  /// Returns a structured JSON: { food, estimated_calories, ingredients, description }
+  static Future<Map<String, dynamic>> analyzeFoodImageOllama(File imageFile) async {
+    final token = await FirebaseAuth.instance.currentUser!.getIdToken();
+    final uri = Uri.parse('$BASE_URL/ollama/analyze-image');
+
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(await http.MultipartFile.fromPath(
+      'image',
+      imageFile.path,
+      contentType: MediaType('image', 'jpeg'),
+    ));
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('POST /ollama/analyze-image ${response.statusCode}: ${response.body}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> searchNutritionByLabel(String query) async {
+    final response = await http.get(
+      Uri.parse('$BASE_URL/nutrition/search-nutrition?q=${Uri.encodeComponent(query)}'),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('GET /nutrition/search-nutrition ${response.statusCode}: ${response.body}');
+    }
+  }
 }
+

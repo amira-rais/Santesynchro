@@ -32,9 +32,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Code de vérification envoyé à votre adresse email.'),
-            backgroundColor: Color(0xFF10B981),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).translate('otp_sent_email')),
+            backgroundColor: Theme.of(context).primaryColor,
           ),
         );
         // On redirige vers VerifyEmailScreen pour saisir l'OTP
@@ -77,12 +77,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               style: const TextStyle(fontSize: 22),
             ),
             onPressed: () => langProvider.toggleLanguage(),
-          ),
-          IconButton(
-            icon: Icon(
-              widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-            ),
-            onPressed: () => widget.themeProvider.toggleDarkMode(),
           ),
         ],
       ),
@@ -128,7 +122,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   const SizedBox(height: 16),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Retour à la connexion'),
+                    child: Text(loc.translate('back_to_login_btn')),
                   ),
                 ],
               ),

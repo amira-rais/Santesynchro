@@ -11,7 +11,7 @@ import { Goal, GoalPeriod } from "../models/goal.model";
 // Contrôleur pour ajouter un nouvel objectif
 export const addGoal = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const { type, target, unit } = req.body;
 
     // Vérification des champs obligatoires
@@ -56,7 +56,7 @@ export const addGoal = async (req: Request, res: Response) => {
 // Contrôleur pour récupérer tous les objectifs d'un utilisateur
 export const getGoals = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
 
     // Référence à la collection des objectifs, triée par date décroissante
     const goalsRef = db
@@ -85,7 +85,7 @@ export const getGoals = async (req: Request, res: Response) => {
 // Contrôleur pour récupérer un objectif par son ID
 export const getGoalById = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const goalId = req.params.id as string;
 
     // Référence au document de l'objectif dans Firestore
@@ -116,7 +116,7 @@ export const getGoalById = async (req: Request, res: Response) => {
 // Contrôleur pour mettre à jour un objectif existant
 export const updateGoal = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const goalId = req.params.id as string;
     const updates = req.body;
 
@@ -152,7 +152,7 @@ export const updateGoal = async (req: Request, res: Response) => {
 // Contrôleur pour supprimer un objectif
 export const deleteGoal = async (req: Request, res: Response) => {
   try {
-    const uid = req.user?.uid;
+    const uid = (req as any).user?.uid;
     const goalId = req.params.id as string;
 
     // Référence au document de l'objectif dans Firestore

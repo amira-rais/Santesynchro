@@ -1,14 +1,4 @@
-
-// Interface représentant un aliment ou un composant d'un repas
-export interface MealItem {
-  name: string;
-  quantity: number;   // ex. 100
-  unit: string;       // ex. "g"
-  calories: number;   // kcal
-  carbs: number;      // g
-  proteins: number;   // g
-  fats: number;       // g
-}
+import { Nutrition } from "./nutrition.model";
 
 // Type représentant les différents types de repas
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
@@ -20,7 +10,8 @@ export interface Meal {
   type: MealType;
   quantity: number;
   unit?: string | null;
-  nutrition?: any | null;
-  createdAt: string;
-  source?: string;
+  nutrition?: Nutrition | null;
+  time: string;       // HH:mm
+  createdAt: string;  // ISO string
+  imageUrl?: string | null;
 }

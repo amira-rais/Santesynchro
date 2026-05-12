@@ -4,13 +4,20 @@ import 'package:frontend/core/theme_provider.dart';
 import 'package:frontend/core/language_provider.dart';
 import 'package:frontend/core/app_localizations.dart';
 import 'package:frontend/screens/profile_summary_screen.dart';
+import 'package:frontend/services/api.dart';
+import 'package:frontend/utils/nutrition_calculator.dart';
 
 /// Écran de configuration des objectifs (Onboarding).
 /// Utilise un PageView pour diviser le processus en 3 étapes : Objectifs, Profil, Santé.
 class GoalsScreen extends StatefulWidget {
   final ThemeProvider themeProvider;
+  final bool isEditing;
 
-  const GoalsScreen({super.key, required this.themeProvider});
+  const GoalsScreen({
+    super.key, 
+    required this.themeProvider, 
+    this.isEditing = false,
+  });
 
   @override
   State<GoalsScreen> createState() => _GoalsScreenState();
@@ -21,6 +28,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
   final PageController _pageController = PageController();
   // Index de l'étape actuelle (0, 1 ou 2)
   int _currentStep = 0;
+  bool _loading = false;
   String? _selectedGender;
   int _birthMonth = 1;
   int _birthDay = 1;
@@ -46,6 +54,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
   double _goalWeight = 0.0;
   String _unit = 'kg';
   String _pace = 'Steady';
+  String _activityLevel = 'moderate'; // sedentary, light, moderate, active
 
   final List<Map<String, dynamic>> _goalOptions = [
     {
@@ -75,33 +84,33 @@ class _GoalsScreenState extends State<GoalsScreen> {
   ];
 
   static const List<Map<String, dynamic>> _pathologyData = [
-    {"id": "diabetes_type_1", "name": "Diabetes Type 1", "category": "Metabolic", "description": "Requires insulin management and careful monitoring of blood sugar levels."},
-    {"id": "diabetes_type_2", "name": "Diabetes Type 2", "category": "Metabolic", "description": "Can be managed with diet, exercise, and medication."},
-    {"id": "obesity", "name": "Obesity", "category": "Metabolic", "description": "Excess body fat that increases health risks."},
-    {"id": "hypertension", "name": "Hypertension", "category": "Cardiovascular", "description": "High blood pressure requiring reduced salt intake and lifestyle changes."},
-    {"id": "high_cholesterol", "name": "High Cholesterol", "category": "Cardiovascular", "description": "High levels of cholesterol that may lead to heart disease."},
-    {"id": "heart_disease", "name": "Heart Disease", "category": "Cardiovascular", "description": "Conditions affecting heart function and blood circulation."},
-    {"id": "gerd", "name": "Acid Reflux (GERD)", "category": "Digestive", "description": "Causes stomach acid to flow back into the esophagus."},
-    {"id": "ibs", "name": "Irritable Bowel Syndrome (IBS)", "category": "Digestive", "description": "Affects digestion and causes discomfort and bloating."},
-    {"id": "anemia", "name": "Anemia", "category": "Deficiency", "description": "Low iron levels causing fatigue and weakness."},
-    {"id": "thyroid", "name": "Thyroid Disorder", "category": "Hormonal", "description": "Affects metabolism and energy levels."},
-    {"id": "pcos", "name": "PCOS", "category": "Hormonal", "description": "Hormonal imbalance affecting women’s health."},
-    {"id": "none", "name": "No condition", "category": "General", "description": "No specific health condition."}
+    {"id": "diabetes_type_1", "nameKey": "diabetes_type_1_name", "category": "Metabolic", "descKey": "diabetes_type_1_desc"},
+    {"id": "diabetes_type_2", "nameKey": "diabetes_type_2_name", "category": "Metabolic", "descKey": "diabetes_type_2_desc"},
+    {"id": "obesity", "nameKey": "obesity_name", "category": "Metabolic", "descKey": "obesity_desc"},
+    {"id": "hypertension", "nameKey": "hypertension_name", "category": "Cardiovascular", "descKey": "hypertension_desc"},
+    {"id": "high_cholesterol", "nameKey": "high_cholesterol_name", "category": "Cardiovascular", "descKey": "high_cholesterol_desc"},
+    {"id": "heart_disease", "nameKey": "heart_disease_name", "category": "Cardiovascular", "descKey": "heart_disease_desc"},
+    {"id": "gerd", "nameKey": "gerd_name", "category": "Digestive", "descKey": "gerd_desc"},
+    {"id": "ibs", "nameKey": "ibs_name", "category": "Digestive", "descKey": "ibs_desc"},
+    {"id": "anemia", "nameKey": "anemia_name", "category": "Deficiency", "descKey": "anemia_desc"},
+    {"id": "thyroid", "nameKey": "thyroid_name", "category": "Hormonal", "descKey": "thyroid_desc"},
+    {"id": "pcos", "nameKey": "pcos_name", "category": "Hormonal", "descKey": "pcos_desc"},
+    {"id": "none", "nameKey": "none_condition_name", "category": "General", "descKey": "none_condition_desc"}
   ];
 
   static const List<Map<String, dynamic>> _allergyData = [
-    {"id": "peanuts", "name": "Peanuts", "type": "Food Allergy", "severity": ["Mild", "Moderate", "Severe"]},
-    {"id": "tree_nuts", "name": "Tree Nuts", "type": "Food Allergy", "severity": ["Mild", "Moderate", "Severe"]},
-    {"id": "milk", "name": "Milk", "type": "Food Allergy", "severity": ["Mild", "Moderate", "Severe"]},
-    {"id": "eggs", "name": "Eggs", "type": "Food Allergy", "severity": ["Mild", "Moderate", "Severe"]},
-    {"id": "gluten", "name": "Gluten", "type": "Food Allergy", "severity": ["Mild", "Moderate", "Severe"]},
-    {"id": "fish", "name": "Fish", "type": "Food Allergy", "severity": ["Mild", "Moderate", "Severe"]},
-    {"id": "shellfish", "name": "Shellfish", "type": "Food Allergy", "severity": ["Mild", "Moderate", "Severe"]},
-    {"id": "soy", "name": "Soy", "type": "Food Allergy", "severity": ["Mild", "Moderate", "Severe"]},
-    {"id": "sesame", "name": "Sesame", "type": "Food Allergy", "severity": ["Mild", "Moderate", "Severe"]},
-    {"id": "lactose_intolerance", "name": "Lactose Intolerance", "type": "Intolerance", "severity": ["Mild", "Moderate"]},
-    {"id": "gluten_sensitivity", "name": "Gluten Sensitivity", "type": "Intolerance", "severity": ["Mild", "Moderate"]},
-    {"id": "none", "name": "No allergies", "type": "General", "severity": []}
+    {"id": "peanuts", "nameKey": "peanuts_name", "type": "Food Allergy"},
+    {"id": "tree_nuts", "nameKey": "tree_nuts_name", "type": "Food Allergy"},
+    {"id": "milk", "nameKey": "milk_name", "type": "Food Allergy"},
+    {"id": "eggs", "nameKey": "eggs_name", "type": "Food Allergy"},
+    {"id": "gluten", "nameKey": "gluten_name", "type": "Food Allergy"},
+    {"id": "fish", "nameKey": "fish_name", "type": "Food Allergy"},
+    {"id": "shellfish", "nameKey": "shellfish_name", "type": "Food Allergy"},
+    {"id": "soy", "nameKey": "soy_name", "type": "Food Allergy"},
+    {"id": "sesame", "nameKey": "sesame_name", "type": "Food Allergy"},
+    {"id": "lactose_intolerance", "nameKey": "lactose_intolerance_name", "type": "Intolerance"},
+    {"id": "gluten_sensitivity", "nameKey": "gluten_sensitivity_name", "type": "Intolerance"},
+    {"id": "none", "nameKey": "no_allergies_name", "type": "General"}
   ];
 
   @override
@@ -110,6 +119,49 @@ class _GoalsScreenState extends State<GoalsScreen> {
     _monthController = FixedExtentScrollController(initialItem: _birthMonth - 1);
     _dayController = FixedExtentScrollController(initialItem: _birthDay - 1);
     _yearController = FixedExtentScrollController(initialItem: _yearToIndex(_birthYear));
+    
+    if (widget.isEditing) {
+      _loadExistingData();
+    }
+  }
+
+  Future<void> _loadExistingData() async {
+    setState(() => _loading = true);
+    try {
+      final me = await Api.me();
+      final goals = await Api.getGoals();
+
+      setState(() {
+        _selectedGender = me['gender'];
+        if (me['birthDate'] != null) {
+          final dt = DateTime.tryParse(me['birthDate']);
+          if (dt != null) {
+            _birthYear = dt.year;
+            _birthMonth = dt.month;
+            _birthDay = dt.day;
+            
+            if (_yearController.hasClients) _yearController.jumpToItem(_yearToIndex(_birthYear));
+            if (_monthController.hasClients) _monthController.jumpToItem(_birthMonth - 1);
+            if (_dayController.hasClients) _dayController.jumpToItem(_birthDay - 1);
+          }
+        }
+        _height = double.tryParse(me['height']?.toString() ?? '175') ?? 175.0;
+        _currentWeight = double.tryParse(me['weight']?.toString() ?? '85') ?? 85.0;
+        _targetWeight = double.tryParse(me['targetWeight']?.toString() ?? '75') ?? 75.0;
+        _pace = me['pace'] ?? 'Steady';
+        _activityLevel = me['activityLevel'] ?? 'moderate';
+        
+        _selectedDiets.addAll((me['diets'] as List? ?? []).map((e) => e.toString()));
+        _selectedConditions.addAll((me['conditions'] as List? ?? []).map((e) => e.toString()));
+        _selectedAllergies.addAll((me['allergies'] as List? ?? []).map((e) => e.toString()));
+        
+        _selectedGoals.addAll(goals.map((g) => g['type'].toString()));
+      });
+    } catch (e) {
+      debugPrint("Error loading existing goals: $e");
+    } finally {
+      setState(() => _loading = false);
+    }
   }
 
   @override
@@ -137,9 +189,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
     final langProvider = LanguageProvider();
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+        backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios, color: isDark ? Colors.white : Colors.black, size: 20),
@@ -162,18 +214,20 @@ class _GoalsScreenState extends State<GoalsScreen> {
           ),
         ],
       ),
-      body: PageView(
-        controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(),
-        onPageChanged: (index) => setState(() => _currentStep = index),
-        children: [
-          _buildGenderSelection(primaryColor, isDark),
-          _buildBirthDateSelection(primaryColor, isDark),
-          _buildGoalSelection(primaryColor, isDark),
-          _buildProfileSetup(primaryColor, isDark),
-          _buildHealthSetup(primaryColor, isDark),
-        ],
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : PageView(
+              controller: _pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              onPageChanged: (index) => setState(() => _currentStep = index),
+              children: [
+                _buildGenderSelection(primaryColor, isDark),
+                _buildBirthDateSelection(primaryColor, isDark),
+                _buildGoalSelection(primaryColor, isDark),
+                _buildProfileSetup(primaryColor, isDark),
+                _buildHealthSetup(primaryColor, isDark),
+              ],
+            ),
     );
   }
 
@@ -277,6 +331,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
     required bool isDark,
     required VoidCallback onTap,
   }) {
+    final theme = Theme.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
@@ -290,13 +345,13 @@ class _GoalsScreenState extends State<GoalsScreen> {
         ),
         decoration: BoxDecoration(
           color: selected
-              ? (isDark ? selectedBackground.withOpacity(0.65) : selectedBackground)
-              : (isDark ? const Color(0xFF1A1A1A) : Colors.white),
+              ? (isDark ? theme.primaryColor.withOpacity(0.4) : selectedBackground)
+              : theme.cardColor,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: selected
-                ? const Color(0xFF17172A)
-                : (isDark ? Colors.white24 : const Color(0xFFD6D6DE)),
+                ? theme.primaryColor
+                : (isDark ? theme.dividerColor : const Color(0xFFD6D6DE)),
             width: selected ? 2 : 1.1,
           ),
         ),
@@ -519,9 +574,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
     required ValueChanged<int> onSelectedItemChanged,
   }) {
     final isDark = widget.themeProvider.isDarkMode;
+    final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF202028) : Colors.transparent,
+        color: isDark ? theme.cardColor : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
       ),
       child: CupertinoPicker(
@@ -599,6 +655,31 @@ class _GoalsScreenState extends State<GoalsScreen> {
     double diff = _currentWeight - displayedTargetWeight;
     double percent = (_currentWeight > 0) ? (diff / _currentWeight) * 100 : 0;
     
+    // Calcul de l'IMC (BMI)
+    double heightInMeters = _height / 100;
+    double imc = _currentWeight / (heightInMeters * heightInMeters);
+    String imcCategory = '';
+    Color imcColor = Colors.grey;
+    String imcDesc = '';
+
+    if (imc < 18.5) {
+      imcCategory = loc.translate('bmi_underweight') ?? 'Insuffisance pondérale';
+      imcColor = Colors.blue;
+      imcDesc = 'Votre poids est inférieur à la normale.';
+    } else if (imc < 25) {
+      imcCategory = loc.translate('bmi_normal') ?? 'Corpulence normale';
+      imcColor = Colors.green;
+      imcDesc = 'Vous avez un poids de forme.';
+    } else if (imc < 30) {
+      imcCategory = loc.translate('bmi_overweight') ?? 'Surpoids';
+      imcColor = Colors.orange;
+      imcDesc = 'Votre poids est supérieur à la normale.';
+    } else {
+      imcCategory = loc.translate('bmi_obese') ?? 'Obésité';
+      imcColor = Colors.red;
+      imcDesc = 'Des risques pour votre santé sont possibles.';
+    }
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -606,21 +687,77 @@ class _GoalsScreenState extends State<GoalsScreen> {
         children: [
           const SizedBox(height: 16),
           Text(
-            loc.translate('fine_tune_goal'),
+            loc.translate('fine_tune_goal') ?? 'Affinez votre objectif',
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
-            loc.translate('adjust_metrics'),
+            loc.translate('adjust_metrics') ?? 'Ajustez vos mesures pour personnaliser votre plan nutritionnel.',
             style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
           const SizedBox(height: 32),
 
-          _buildMetricSlider(loc.translate('height'), _height, 140, 220, 'cm', (val) => setState(() => _height = val), primaryColor, isDark),
-          _buildMetricSlider(loc.translate('weight_current'), _currentWeight, 40, 150, 'kg', (val) => setState(() => _currentWeight = val), primaryColor, isDark),
-          _buildMetricSlider(loc.translate('weight_target'), displayedTargetWeight, 40, 150, 'kg', (val) => setState(() => _targetWeight = val), primaryColor, isDark, enabled: !isWeightLossSelected),
+          _buildMetricSlider(loc.translate('height') ?? 'Taille', _height, 140, 220, 'cm', (val) => setState(() => _height = val), primaryColor, isDark),
+          _buildMetricSlider(loc.translate('weight_current') ?? 'Poids Actuel', _currentWeight, 40, 150, 'kg', (val) => setState(() => _currentWeight = val), primaryColor, isDark),
+          _buildMetricSlider(loc.translate('weight_target') ?? 'Poids Cible', displayedTargetWeight, 40, 150, 'kg', (val) => setState(() => _targetWeight = val), primaryColor, isDark, enabled: !isWeightLossSelected),
 
           const SizedBox(height: 16),
+          // Boîte de l'IMC
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: imcColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: imcColor.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: imcColor.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    imc.toStringAsFixed(1),
+                    style: TextStyle(color: imcColor, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'IMC : $imcCategory',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87, fontSize: 16),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        imcDesc,
+                        style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700], fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Sélection du niveau d'activité
+          Text(
+            loc.translate('activity_level') ?? 'Niveau d\'activité',
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Déterminez votre dépense énergétique quotidienne',
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 16),
+          _buildActivityLevelSelector(primaryColor, isDark),
+
+          const SizedBox(height: 32),
           // Boîte de résumé de l'objectif calculé dynamiquement
           Container(
             padding: const EdgeInsets.all(20),
@@ -741,6 +878,74 @@ class _GoalsScreenState extends State<GoalsScreen> {
     );
   }
 
+  Widget _buildActivityLevelSelector(Color primaryColor, bool isDark) {
+    return Column(
+      children: [
+        _buildActivityOption('sedentary', 'Sédentaire', 'Peu ou pas d\'exercice', Icons.weekend_outlined, primaryColor, isDark),
+        const SizedBox(height: 8),
+        _buildActivityOption('light', 'Légère', 'Exercice léger 1-3 jours/sem', Icons.directions_walk, primaryColor, isDark),
+        const SizedBox(height: 8),
+        _buildActivityOption('moderate', 'Modérée', 'Exercice modéré 3-5 jours/sem', Icons.directions_run, primaryColor, isDark),
+        const SizedBox(height: 8),
+        _buildActivityOption('active', 'Intense', 'Exercice intense 6-7 jours/sem', Icons.fitness_center, primaryColor, isDark),
+      ],
+    );
+  }
+
+  Widget _buildActivityOption(String value, String title, String subtitle, IconData icon, Color primaryColor, bool isDark) {
+    bool selected = _activityLevel == value;
+    return GestureDetector(
+      onTap: () => setState(() => _activityLevel = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected ? primaryColor.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? primaryColor : (isDark ? Colors.grey[800]! : Colors.grey[300]!),
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: selected ? primaryColor : (isDark ? Colors.grey[800] : Colors.grey[200]),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: selected ? Colors.white : Colors.grey, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                      color: selected ? primaryColor : (isDark ? Colors.white : Colors.black87),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            if (selected)
+              Icon(Icons.check_circle, color: primaryColor)
+          ],
+        ),
+      ),
+    );
+  }
+
   /// ÉTAPE 3 : Informations de santé (Pathologies et Allergies)
   Widget _buildHealthSetup(Color primaryColor, bool isDark) {
     final loc = AppLocalizations.of(context);
@@ -768,31 +973,23 @@ class _GoalsScreenState extends State<GoalsScreen> {
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
           const SizedBox(height: 16),
           ..._pathologyData.map((patho) {
-            bool isNoneSelected = _selectedConditions.contains('No condition');
-            bool isThisNone = patho['id'] == 'none';
-            bool selected = _selectedConditions.contains(patho['name']);
-            bool disabled = isNoneSelected && !isThisNone;
-
-            return _buildSelectionTile(
-              title: patho['name'],
-              subtitle: patho['description'],
-              icon: Icons.medical_services_outlined,
-              selected: selected,
-              enabled: !disabled,
-              onTap: disabled ? null : () {
+            bool selected = _selectedConditions.contains(patho['id']);
+            return _buildConditionTile(
+              patho['id'],
+              loc.translate(patho['nameKey']),
+              loc.translate(patho['descKey']),
+              Icons.healing,
+              onTap: () {
                 setState(() {
-                  if (isThisNone) {
-                    if (selected) {
-                      _selectedConditions.remove(patho['name']);
-                    } else {
-                      _selectedConditions.clear();
-                      _selectedConditions.add(patho['name']);
-                    }
+                  if (patho['id'] == 'none') {
+                    _selectedConditions.clear();
+                    _selectedConditions.add('none');
                   } else {
+                    _selectedConditions.remove('none');
                     if (selected) {
-                      _selectedConditions.remove(patho['name']);
+                      _selectedConditions.remove(patho['id']);
                     } else {
-                      _selectedConditions.add(patho['name']);
+                      _selectedConditions.add(patho['id']);
                     }
                   }
                 });
@@ -812,28 +1009,29 @@ class _GoalsScreenState extends State<GoalsScreen> {
             spacing: 10,
             runSpacing: 10,
             children: _allergyData.map((allergy) {
-              bool isNoneSelected = _selectedAllergies.contains('No allergies');
+              bool isNoneSelected = _selectedAllergies.contains('none');
               bool isThisNone = allergy['id'] == 'none';
-              bool selected = _selectedAllergies.contains(allergy['name']);
+              bool selected = _selectedAllergies.contains(allergy['id']);
               bool disabled = isNoneSelected && !isThisNone;
 
               return FilterChip(
-                label: Text(allergy['name']),
+                label: Text(loc.translate(allergy['nameKey'])),
                 selected: selected,
                 onSelected: disabled ? null : (val) {
                   setState(() {
                     if (isThisNone) {
                       if (val) {
                         _selectedAllergies.clear();
-                        _selectedAllergies.add(allergy['name']);
+                        _selectedAllergies.add(allergy['id']);
                       } else {
-                        _selectedAllergies.remove(allergy['name']);
+                        _selectedAllergies.remove(allergy['id']);
                       }
                     } else {
+                      _selectedAllergies.remove('none');
                       if (val) {
-                        _selectedAllergies.add(allergy['name']);
+                        _selectedAllergies.add(allergy['id']);
                       } else {
-                        _selectedAllergies.remove(allergy['name']);
+                        _selectedAllergies.remove(allergy['id']);
                       }
                     }
                   });
@@ -853,7 +1051,23 @@ class _GoalsScreenState extends State<GoalsScreen> {
           const SizedBox(height: 48),
           _buildContinueButton(
             text: loc.translate('finish') == 'finish' ? 'Finish' : loc.translate('finish'),
-            onPressed: () {
+            onPressed: () async {
+              // Calcul des besoins caloriques avec NutritionCalculator
+              final age = NutritionCalculator.calculateAge(DateTime(_birthYear, _birthMonth, _birthDay));
+              final bmr = NutritionCalculator.calculateBMR(
+                gender: _selectedGender ?? 'male', 
+                weight: _currentWeight, 
+                height: _height, 
+                age: age
+              );
+              final tdee = NutritionCalculator.calculateTDEE(bmr: bmr, activityLevel: _activityLevel);
+              
+              String primaryGoal = 'maintenance';
+              if (_selectedGoals.contains('weight_loss')) primaryGoal = 'weight_loss';
+              else if (_selectedGoals.contains('muscle_gain')) primaryGoal = 'muscle_gain';
+              
+              final dailyCalories = NutritionCalculator.calculateDailyCalories(tdee: tdee, goalType: primaryGoal);
+
               // Rassemblement de toutes les données collectées pour le résumé final
               final Map<String, dynamic> userData = {
                 'gender': _selectedGender,
@@ -863,20 +1077,74 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 'currentWeight': _currentWeight,
                 'targetWeight': displayedTargetWeight,
                 'pace': _pace,
+                'activityLevel': _activityLevel,
                 'diets': _selectedDiets,
                 'conditions': _selectedConditions,
                 'allergies': _selectedAllergies,
+                'nutritionGoals': {
+                  'calories': dailyCalories,
+                  'protein': 0, // Placeholder
+                  'carbs': 0,   // Placeholder
+                  'fat': 0      // Placeholder
+                }
               };
               
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfileSummaryScreen(
-                    themeProvider: widget.themeProvider,
-                    userData: userData,
+              if (widget.isEditing) {
+                setState(() => _loading = true);
+                try {
+                  // 1. Mise à jour du profil
+                  await Api.updateProfile({
+                    'gender': userData['gender'],
+                    'birthDate': userData['birthDate'],
+                    'height': userData['height'],
+                    'weight': userData['currentWeight'],
+                    'targetWeight': userData['targetWeight'],
+                    'pace': userData['pace'],
+                    'activityLevel': userData['activityLevel'],
+                    'nutritionGoals': userData['nutritionGoals'],
+                    'diets': (userData['diets'] as Set<String>).toList(),
+                    'conditions': (userData['conditions'] as Set<String>).toList(),
+                    'allergies': (userData['allergies'] as Set<String>).toList(),
+                  });
+
+                  // 2. Mise à jour des objectifs (On rajoute les nouveaux s'ils n'existent pas)
+                  final existingGoals = await Api.getGoals();
+                  final Set<String> existingTypes = existingGoals.map((g) => g['type'].toString()).toSet();
+                  
+                  for (var goalType in _selectedGoals) {
+                    if (!existingTypes.contains(goalType)) {
+                      await Api.addGoal({
+                        'type': goalType,
+                        'target': userData['targetWeight'],
+                        'unit': 'kg',
+                      });
+                    }
+                  }
+
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                } catch (e) {
+                  debugPrint("Error updating goals: $e");
+                  if (mounted) {
+                    final loc = AppLocalizations.of(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('${loc.translate('save_error')} : $e')),
+                    );
+                  }
+                } finally {
+                  if (mounted) setState(() => _loading = false);
+                }
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfileSummaryScreen(
+                      themeProvider: widget.themeProvider,
+                      userData: userData,
+                    ),
                   ),
-                ),
-              );
+                );
+              }
             },
           ),
           const SizedBox(height: 24),
@@ -942,17 +1210,12 @@ class _GoalsScreenState extends State<GoalsScreen> {
     );
   }
 
-  Widget _buildConditionTile(String title, String subtitle, IconData icon, bool isDark, Color primaryColor) {
-    bool selected = _selectedConditions.contains(title);
+  Widget _buildConditionTile(String id, String title, String subtitle, IconData icon, {required VoidCallback onTap, required bool isDark, required Color primaryColor}) {
+    bool selected = _selectedConditions.contains(id);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: InkWell(
-        onTap: () {
-          setState(() {
-            if (selected) _selectedConditions.remove(title);
-            else _selectedConditions.add(title);
-          });
-        },
+        onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),
@@ -1013,7 +1276,12 @@ class _GoalsScreenState extends State<GoalsScreen> {
         : 0;
     
     DateTime goalDate = DateTime.now().add(Duration(days: daysToGoal));
-    final List<String> months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final List<String> months = [
+      loc.translate('jan'), loc.translate('feb'), loc.translate('mar'),
+      loc.translate('apr'), loc.translate('may'), loc.translate('jun'),
+      loc.translate('jul'), loc.translate('aug'), loc.translate('sep'),
+      loc.translate('oct'), loc.translate('nov'), loc.translate('dec')
+    ];
     String formattedDate = daysToGoal > 0 
         ? "${months[goalDate.month - 1]} ${goalDate.day} ${goalDate.year}"
         : "--";
@@ -1021,9 +1289,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF0FDF4),
+        color: isDark ? Theme.of(context).cardColor : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: primaryColor.withOpacity(0.1)),
+        border: Border.all(color: isDark ? Theme.of(context).dividerColor : Colors.grey[200]!),
       ),
       child: Column(
         children: [
@@ -1069,11 +1337,11 @@ class _GoalsScreenState extends State<GoalsScreen> {
             text: TextSpan(
               style: TextStyle(color: Colors.grey[600], fontSize: 13, height: 1.5),
               children: [
-                TextSpan(text: 'To reach ', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
+                TextSpan(text: loc.translate('reach_goal_text_1'), style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
                 TextSpan(text: '${_goalWeight.toStringAsFixed(1)}kg', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                TextSpan(text: ' at a ', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
-                TextSpan(text: '$_pace', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColor)),
-                TextSpan(text: ' pace, you will complete your goal around ', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
+                TextSpan(text: loc.translate('reach_goal_text_2'), style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
+                TextSpan(text: loc.translate(_pace.toLowerCase()), style: TextStyle(fontWeight: FontWeight.bold, color: primaryColor)),
+                TextSpan(text: loc.translate('reach_goal_text_3'), style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
                 TextSpan(text: formattedDate, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
               ],
             ),
@@ -1122,6 +1390,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
     final theme = Theme.of(context);
     final isDark = widget.themeProvider.isDarkMode;
     final primaryColor = theme.primaryColor;
+    final loc = AppLocalizations.of(context);
 
     // État local pour le dialogue
     String weightLossDuration = "1 mois";
@@ -1161,11 +1430,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
         final loc = AppLocalizations.of(context);
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return Dialog(
-              backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: SingleChildScrollView(
+            return Scaffold(
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+              body: SingleChildScrollView(
                 child: Stack(
                   children: [
                     Padding(
@@ -1313,12 +1580,13 @@ class _GoalsScreenState extends State<GoalsScreen> {
 
   /// Retourne une petite phrase de motivation selon l'objectif
   String _getGoalMotto(String goalId) {
+    final loc = AppLocalizations.of(context);
     switch (goalId) {
-      case 'weight_loss': return "Chaque petit pas compte vers un nouveau vous.";
-      case 'muscle_gain': return "La constance est la clé de la croissance.";
+      case 'weight_loss': return loc.translate('motto_weight_loss');
+      case 'muscle_gain': return loc.translate('motto_muscle_gain');
       case 'general':
-      case 'lifestyle': return "Votre bien-être est une priorité, pas une option.";
-      default: return "Définissez votre chemin vers la santé.";
+      case 'lifestyle': return loc.translate('motto_lifestyle');
+      default: return loc.translate('motto_default');
     }
   }
 
@@ -1382,17 +1650,15 @@ class _GoalsScreenState extends State<GoalsScreen> {
     final int selectedIndex = paceOrder.indexOf(_pace).clamp(0, 2);
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF23232A) : const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFE7E9F1)),
+        color: isDark ? Theme.of(context).cardColor : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? Theme.of(context).dividerColor : Colors.grey[300]!),
       ),
       child: Column(
         children: [
           Text(
-            'Lose weight speed per week',
+            AppLocalizations.of(context).translate('lose_weight_speed'),
             style: TextStyle(fontSize: 13, color: isDark ? Colors.grey[300] : const Color(0xFF374151)),
           ),
           const SizedBox(height: 8),
@@ -1481,26 +1747,28 @@ class _GoalsScreenState extends State<GoalsScreen> {
   }
 
   String _paceMessage() {
+    final loc = AppLocalizations.of(context);
     switch (_pace) {
       case 'Slow':
-        return 'Slow and Steady';
+        return loc.translate('pace_slow_steady');
       case 'Fast':
-        return 'You may feel very tired and develop loose skin';
+        return loc.translate('pace_warning_fast');
       case 'Steady':
       default:
-        return 'Recommended';
+        return loc.translate('recommended');
     }
   }
 
   /// Contenu spécifique pour l'objectif "Prise de muscle"
   Widget _buildMuscleGainDialogContent(bool isDark, Color primaryColor, StateSetter setDialogState, String selectedLevel, String selectedDiet, double trainingDays, Function(String) onLevelChanged, Function(String) onDietChanged, Function(double) onDaysChanged) {
+    final loc = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Build Your Plan', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        Text(loc.translate('build_your_plan'), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         Text(
-          'Customize your training focus and frequency to calculate your nutritional requirements.',
+          loc.translate('customize_plan_desc'),
           style: TextStyle(fontSize: 14, color: isDark ? Colors.grey[400] : Colors.grey[600]),
         ),
         const SizedBox(height: 24),
@@ -1508,7 +1776,13 @@ class _GoalsScreenState extends State<GoalsScreen> {
           children: [
             Icon(Icons.fitness_center, size: 20, color: primaryColor),
             const SizedBox(width: 8),
-            const Text('Target Muscle Groups', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text(
+                loc.translate('target_muscle_groups'),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -1520,9 +1794,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
           mainAxisSpacing: 12,
           childAspectRatio: 1.6,
           children: [
-            _buildGridOption('Full Body', Icons.accessibility_new, selectedLevel == 'Full Body', onLevelChanged, isDark, primaryColor),
-            _buildGridOption('Upper Body', Icons.arrow_upward, selectedLevel == 'Upper Body', onLevelChanged, isDark, primaryColor),
-            _buildGridOption('Legs', Icons.arrow_downward, selectedLevel == 'Legs', onLevelChanged, isDark, primaryColor),
+            _buildGridOption(loc.translate('full_body'), Icons.accessibility_new, selectedLevel == 'Full Body', onLevelChanged, isDark, primaryColor),
+            _buildGridOption(loc.translate('upper_body'), Icons.arrow_upward, selectedLevel == 'Upper Body', onLevelChanged, isDark, primaryColor),
+            _buildGridOption(loc.translate('legs'), Icons.arrow_downward, selectedLevel == 'Legs', onLevelChanged, isDark, primaryColor),
             _buildGridOption('Push / Pull', Icons.compare_arrows, selectedLevel == 'Push / Pull', onLevelChanged, isDark, primaryColor),
           ],
         ),
@@ -1530,14 +1804,22 @@ class _GoalsScreenState extends State<GoalsScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Icon(Icons.calendar_month, size: 20, color: primaryColor),
-                const SizedBox(width: 8),
-                const Text('Training Frequency', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ],
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(Icons.calendar_month, size: 20, color: primaryColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      loc.translate('training_frequency'),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Text('${trainingDays.toInt()} days', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryColor)),
+            Text(loc.translate('training_days_count').replaceAll('{count}', trainingDays.toInt().toString()), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryColor)),
           ],
         ),
         const SizedBox(height: 16),
@@ -1574,11 +1856,17 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 children: [
                   const Icon(Icons.restaurant_menu, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
-                  Text('YOUR GROWTH FUEL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.8))),
+                  Expanded(
+                    child: Text(
+                      loc.translate('growth_fuel'),
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.8)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text('Estimated Protein Target', style: TextStyle(fontSize: 16, color: Colors.white)),
+              Text(loc.translate('estimated_protein'), style: const TextStyle(fontSize: 16, color: Colors.white)),
             ],
           ),
         ),
@@ -1618,25 +1906,26 @@ class _GoalsScreenState extends State<GoalsScreen> {
 
   /// Contenu spécifique pour l'objectif "Vie Saine"
   Widget _buildWellnessDialogContent(bool isDark, Color primaryColor, StateSetter setDialogState, List<String> selectedHabits, Function(String) onHabitToggled) {
+    final loc = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Build your new habits', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        Text(loc.translate('build_habits_title'), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         Text(
-          'Select the daily habits you\'d like to focus on for a healthier lifestyle.',
+          loc.translate('build_habits_desc'),
           style: TextStyle(fontSize: 14, color: isDark ? Colors.grey[400] : Colors.grey[600]),
         ),
         const SizedBox(height: 24),
-        _buildHabitOption('Drink 2L Water', 'Boost energy and skin health', Icons.water_drop, const Color(0xFFE0F2FE), const Color(0xFF0EA5E9), selectedHabits.contains('Drink 2L Water'), isDark, primaryColor, () => onHabitToggled('Drink 2L Water')),
+        _buildHabitOption(loc.translate('habit_water_title'), loc.translate('habit_water_desc'), Icons.water_drop, const Color(0xFFE0F2FE), const Color(0xFF0EA5E9), selectedHabits.contains('Drink 2L Water'), isDark, primaryColor, () => onHabitToggled('Drink 2L Water')),
         const SizedBox(height: 12),
-        _buildHabitOption('Eat More Veggies', 'Add 3 servings to your daily meals', Icons.apple, const Color(0xFFDCFCE7), const Color(0xFF22C55E), selectedHabits.contains('Eat More Veggies'), isDark, primaryColor, () => onHabitToggled('Eat More Veggies')),
+        _buildHabitOption(loc.translate('habit_veggies_title'), loc.translate('habit_veggies_desc'), Icons.apple, const Color(0xFFDCFCE7), const Color(0xFF22C55E), selectedHabits.contains('Eat More Veggies'), isDark, primaryColor, () => onHabitToggled('Eat More Veggies')),
         const SizedBox(height: 12),
-        _buildHabitOption('Reduce Processed Food', 'Focus on whole, natural ingredients', Icons.no_food, const Color(0xFFFFEDD5), const Color(0xFFF97316), selectedHabits.contains('Reduce Processed Food'), isDark, primaryColor, () => onHabitToggled('Reduce Processed Food')),
+        _buildHabitOption(loc.translate('habit_processed_title'), loc.translate('habit_processed_desc'), Icons.no_food, const Color(0xFFFFEDD5), const Color(0xFFF97316), selectedHabits.contains('Reduce Processed Food'), isDark, primaryColor, () => onHabitToggled('Reduce Processed Food')),
         const SizedBox(height: 12),
-        _buildHabitOption('7+ Hours of Sleep', 'Optimize recovery and focus', Icons.nightlight_round, const Color(0xFFF3E8FF), const Color(0xFFA855F7), selectedHabits.contains('7+ Hours of Sleep'), isDark, primaryColor, () => onHabitToggled('7+ Hours of Sleep')),
+        _buildHabitOption(loc.translate('habit_sleep_title'), loc.translate('habit_sleep_desc'), Icons.nightlight_round, const Color(0xFFF3E8FF), const Color(0xFFA855F7), selectedHabits.contains('7+ Hours of Sleep'), isDark, primaryColor, () => onHabitToggled('7+ Hours of Sleep')),
         const SizedBox(height: 12),
-        _buildHabitOption('Daily 15min Walk', 'Simple movement for heart health', Icons.directions_walk, const Color(0xFFE0F2FE), const Color(0xFF3B82F6), selectedHabits.contains('Daily 15min Walk'), isDark, primaryColor, () => onHabitToggled('Daily 15min Walk')),
+        _buildHabitOption(loc.translate('habit_walk_title'), loc.translate('habit_walk_desc'), Icons.directions_walk, const Color(0xFFE0F2FE), const Color(0xFF3B82F6), selectedHabits.contains('Daily 15min Walk'), isDark, primaryColor, () => onHabitToggled('Daily 15min Walk')),
       ],
     );
   }
@@ -1678,10 +1967,11 @@ class _GoalsScreenState extends State<GoalsScreen> {
 
   /// Vue par défaut si aucun contenu spécifique n'est défini
   Widget _buildDefaultDialogContent(bool isDark, Color primaryColor, String title) {
+    final loc = AppLocalizations.of(context);
     return Column(
       children: [
         Text(
-          "Préparez-vous à atteindre votre objectif : $title",
+          loc.translate('prepare_for_goal').replaceAll('{title}', title),
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 16, color: isDark ? Colors.grey[300] : Colors.grey[700]),
         ),

@@ -11,9 +11,16 @@ export interface User {
   provider: AuthProvider;
   // Extensions futures
   age?: number;
-  gender?: "male" | "female";
+  birthDate?: string; // YYYY-MM-DD
+  gender?: "male" | "female" | "other";
   height?: number; // cm
   weight?: number; // kg
+  targetWeight?: number; // kg
+  pace?: string;
+  activityLevel?: "sedentary" | "light" | "moderate" | "active";
+  diets?: string[];
+  conditions?: string[];
+  allergies?: string[];
   photoUrl?: string | null;
   nutritionGoals?: {
     calories: number;

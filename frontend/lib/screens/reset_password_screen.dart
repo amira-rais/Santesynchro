@@ -37,7 +37,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_pwdCtrl.text != _confirmPwdCtrl.text) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Les mots de passe ne correspondent pas')),
+        SnackBar(content: Text(AppLocalizations.of(context).translate('passwords_mismatch'))),
       );
       return;
     }
@@ -47,7 +47,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     if (email == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('E-mail manquant pour la réinitialisation')),
+        SnackBar(content: Text(AppLocalizations.of(context).translate('email_missing_reset'))),
       );
       return;
     }
@@ -57,7 +57,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       await Api.finalizePasswordReset(email, _pwdCtrl.text.trim());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mot de passe mis à jour avec succès !')),
+          SnackBar(content: Text(AppLocalizations.of(context).translate('password_updated'))),
         );
         Navigator.pushReplacementNamed(context, '/login');
       }
@@ -88,12 +88,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               style: const TextStyle(fontSize: 22),
             ),
             onPressed: () => langProvider.toggleLanguage(),
-          ),
-          IconButton(
-            icon: Icon(
-              widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-            ),
-            onPressed: () => widget.themeProvider.toggleDarkMode(),
           ),
         ],
       ),
@@ -149,7 +143,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                                 color: _passwordsMatch ? Colors.green : Colors.red,
                               ),
                         helperText: _confirmPwdCtrl.text.isNotEmpty && !_passwordsMatch
-                            ? 'Les mots de passe ne correspondent pas'
+                            ? loc.translate('passwords_mismatch')
                             : null,
                         helperStyle: const TextStyle(color: Colors.red),
                       ),
@@ -157,7 +151,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     const SizedBox(height: 32),
                     ElevatedButton(
                       onPressed: (_passwordValid && _passwordsMatch) ? _resetPassword : null,
-                      child: const Text('Mettre à jour'),
+                      child: Text(loc.translate('update_button')),
                     ),
                   ],
                 ),

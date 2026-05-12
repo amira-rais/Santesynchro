@@ -77,7 +77,7 @@ class _SignupScreenState extends State<SignupScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? loc.translate('signup_failed'))));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -100,6 +100,7 @@ class _SignupScreenState extends State<SignupScreen> {
       Navigator.pushReplacementNamed(context, '/verify-email');
     } catch (e) {
       if (!mounted) return;
+      final loc = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Google: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -108,188 +109,193 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.primaryColor;
     final loc = AppLocalizations.of(context);
     final langProvider = LanguageProvider();
+
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(loc.translate('signup_title')),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Text(
-              langProvider.currentLocaleCode == 'fr' ? '🇫🇷' : '🇬🇧',
-              style: const TextStyle(fontSize: 22),
+          elevation: 0,
+          actions: [
+            IconButton(
+              icon: Text(
+                langProvider.currentLocaleCode == 'fr' ? '🇫🇷' : '🇬🇧',
+                style: const TextStyle(fontSize: 22),
+              ),
+              onPressed: () => langProvider.toggleLanguage(),
             ),
-            onPressed: () => langProvider.toggleLanguage(),
-          ),
-          IconButton(
-            icon: Icon(
-              widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+            IconButton(
+              icon: Icon(
+                widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+              ),
+              onPressed: () => widget.themeProvider.toggleDarkMode(),
             ),
-            onPressed: () => widget.themeProvider.toggleDarkMode(),
-          ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 30),
-                    // Logo / Titre
-                    Center(
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.person_add,
-                              size: 48,
-                              color: Color(0xFF10B981),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            loc.translate('signup_header'),
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            loc.translate('signup_subtitle'),
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-                    // Nom
-                    TextFormField(
-                      controller: _nameCtrl,
-                      decoration: InputDecoration(
-                        labelText: loc.translate('name_label'),
-                        hintText: loc.translate('name_hint'),
-                        prefixIcon: const Icon(Icons.person_outline),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? loc.translate('name_required') : null,
-                    ),
-                    const SizedBox(height: 16),
-                    // Email
-                    TextFormField(
-                      controller: _emailCtrl,
-                      decoration: InputDecoration(
-                        labelText: loc.translate('email_label'),
-                        hintText: loc.translate('email_hint'),
-                        prefixIcon: const Icon(Icons.email_outlined),
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? loc.translate('email_required')
-                          : (!v.contains('@') ? loc.translate('email_invalid') : null),
-                    ),
-                    const SizedBox(height: 16),
-                    // Mot de passe
-                    TextFormField(
-                      controller: _pwdCtrl,
-                      focusNode: _pwdFocus,
-                      decoration: InputDecoration(
-                        labelText: loc.translate('password_label'),
-                        hintText: loc.translate('password_hint'),
-                        prefixIcon: const Icon(Icons.lock_outlined),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _showPassword ? Icons.visibility : Icons.visibility_off,
-                          ),
-                          onPressed: () => setState(() => _showPassword = !_showPassword),
-                        ),
-                      ),
-                      obscureText: !_showPassword,
-                      validator: (v) => (v == null || v.trim().length < 7)
-                          ? loc.translate('password_min')
-                          : null,
-                    ),
-                    PasswordValidationWidget(
-                      password: _pwdCtrl.text,
-                      isVisible: _pwdFocus.hasFocus,
-                      onValidationChanged: (isValid) {
-                        if (_passwordValid != isValid) {
-                          setState(() => _passwordValid = isValid);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    // Confirmer mot de passe
-                    TextFormField(
-                      controller: _pwd2Ctrl,
-                      decoration: InputDecoration(
-                        labelText: loc.translate('confirm_password_label'),
-                        hintText: loc.translate('password_hint'),
-                        prefixIcon: const Icon(Icons.lock_outlined),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _showPassword2 ? Icons.visibility : Icons.visibility_off,
-                          ),
-                          onPressed: () => setState(() => _showPassword2 = !_showPassword2),
-                        ),
-                      ),
-                      obscureText: !_showPassword2,
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? loc.translate('confirm_password')
-                          : null,
-                    ),
-                    const SizedBox(height: 24),
-                    // Bouton inscription
-                    ElevatedButton.icon(
-                      onPressed: _passwordValid ? _signupEmail : null,
-                      icon: const Icon(Icons.person_add),
-                      label: Text(loc.translate('signup_button') == 'signup_button' ? "S'inscrire" : loc.translate('signup_button')),
-                    ),
-                    const SizedBox(height: 12),
-                    // Bouton Google
-                    OutlinedButton.icon(
-                      onPressed: _signupGoogle,
-                      icon: const Icon(FontAwesomeIcons.google),
-                      label: Text(loc.translate('google_login')),
-                    ),
-                    const SizedBox(height: 24),
-                    // Lien connexion
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+          ],
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(loc.translate('already_have_account')),
-                        TextButton(
-                          onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        const SizedBox(height: 30),
+                        // Logo / Titre
+                        Center(
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.person_add,
+                                  size: 48,
+                                  color: primaryColor,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                loc.translate('signup_header'),
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                loc.translate('signup_subtitle'),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
                           ),
-                          child: Text(
-                            loc.translate('login_link'),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 40),
+                        // Nom
+                        TextFormField(
+                          controller: _nameCtrl,
+                          decoration: InputDecoration(
+                            labelText: loc.translate('name_label'),
+                            hintText: loc.translate('name_hint'),
+                            prefixIcon: const Icon(Icons.person_outline),
                           ),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? loc.translate('name_required') : null,
+                        ),
+                        const SizedBox(height: 16),
+                        // Email
+                        TextFormField(
+                          controller: _emailCtrl,
+                          decoration: InputDecoration(
+                            labelText: loc.translate('email_label'),
+                            hintText: loc.translate('email_hint'),
+                            prefixIcon: const Icon(Icons.email_outlined),
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? loc.translate('email_required')
+                              : (!v.contains('@') ? loc.translate('email_invalid') : null),
+                        ),
+                        const SizedBox(height: 16),
+                        // Mot de passe
+                        TextFormField(
+                          controller: _pwdCtrl,
+                          focusNode: _pwdFocus,
+                          decoration: InputDecoration(
+                            labelText: loc.translate('password_label'),
+                            hintText: loc.translate('password_hint'),
+                            prefixIcon: const Icon(Icons.lock_outlined),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _showPassword ? Icons.visibility : Icons.visibility_off,
+                              ),
+                              onPressed: () => setState(() => _showPassword = !_showPassword),
+                            ),
+                          ),
+                          obscureText: !_showPassword,
+                          validator: (v) => (v == null || v.trim().length < 7)
+                              ? loc.translate('password_min')
+                              : null,
+                        ),
+                        PasswordValidationWidget(
+                          password: _pwdCtrl.text,
+                          isVisible: _pwdFocus.hasFocus,
+                          onValidationChanged: (isValid) {
+                            if (_passwordValid != isValid) {
+                              setState(() => _passwordValid = isValid);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        // Confirmer mot de passe
+                        TextFormField(
+                          controller: _pwd2Ctrl,
+                          decoration: InputDecoration(
+                            labelText: loc.translate('confirm_password_label'),
+                            hintText: loc.translate('password_hint'),
+                            prefixIcon: const Icon(Icons.lock_outlined),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _showPassword2 ? Icons.visibility : Icons.visibility_off,
+                              ),
+                              onPressed: () => setState(() => _showPassword2 = !_showPassword2),
+                            ),
+                          ),
+                          obscureText: !_showPassword2,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? loc.translate('confirm_password')
+                              : null,
+                        ),
+                        const SizedBox(height: 24),
+                        // Bouton inscription
+                        ElevatedButton.icon(
+                          onPressed: _signupEmail,
+                          icon: const Icon(Icons.person_add),
+                          label: Text(loc.translate('signup_button')),
+                        ),
+                        const SizedBox(height: 12),
+                        // Bouton Google
+                        OutlinedButton.icon(
+                          onPressed: _signupGoogle,
+                          icon: const Icon(FontAwesomeIcons.google),
+                          label: Text(loc.translate('google_login')),
+                        ),
+                        const SizedBox(height: 24),
+                        // Lien connexion
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(loc.translate('already_have_account')),
+                            TextButton(
+                              onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: Text(
+                                loc.translate('login_link'),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
+      ),
     );
   }
 

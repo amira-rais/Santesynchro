@@ -8,10 +8,18 @@ import 'package:frontend/screens/profile_summary_screen.dart';
 import 'package:frontend/screens/settings_screen.dart';
 import 'package:frontend/core/app_localizations.dart';
 import 'package:frontend/services/health_service.dart';
+import 'package:frontend/services/step_service.dart';
+import 'package:frontend/services/sleep_service.dart';
+import 'package:frontend/services/sync_service.dart';
+import 'package:frontend/models/health_data.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:frontend/screens/barcode_scanner_screen.dart';
+import 'package:frontend/screens/product_search_screen.dart';
+import 'package:frontend/screens/smart_scan_screen.dart';
 import 'dart:async';
+import 'package:frontend/widgets/spotlight_clipper.dart';
 
-/// Écran principal du tableau de bord
+/// Ã‰cran principal du tableau de bord
 class HomeScreen extends StatefulWidget {
   final ThemeProvider themeProvider;
   
@@ -28,6 +36,14 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _quickAddExpanded = false;
   int? _hoveredQuickAction;
   final GlobalKey _plusMenuKey = GlobalKey();
+  List<dynamic> _todayMeals = [];
+  final GlobalKey<AnimatedListState> _timelineKey = GlobalKey<AnimatedListState>();
+
+  // â”€â”€ DonnÃ©es temps rÃ©el (capteurs locaux) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  int _liveSteps = 0;
+  DailySummary? _liveSleep;
+  StreamSubscription<int>? _stepSub;
+  StreamSubscription<DailySummary>? _sleepSub;
 
   @override
   void initState() {
@@ -36,6 +52,19 @@ class _HomeScreenState extends State<HomeScreen> {
     // Refresh every minute to update time/vitals sync conceptually
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) _loadDashboard(silent: true);
+    });
+
+    // Ã‰couter les pas en temps rÃ©el
+    _liveSteps = StepService().todaySteps;
+    _stepSub = StepService().stepStream.listen((steps) {
+      if (mounted) setState(() => _liveSteps = steps);
+      // Notifier le SleepService de l'activitÃ©
+      SleepService().onNewSteps(steps);
+    });
+
+    // Ã‰couter les mises Ã  jour du sommeil
+    _sleepSub = SleepService().sleepStream.listen((summary) {
+      if (mounted) setState(() => _liveSleep = summary);
     });
   }
 
@@ -49,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Saisir mes vitaux'),
+        title: Text(AppLocalizations.of(context).translate('input_vitals')),
         content: Form(
           key: formKey,
           child: Column(
@@ -58,11 +87,11 @@ class _HomeScreenState extends State<HomeScreen> {
               TextFormField(
                 controller: stepsCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre de pas',
-                  prefixIcon: Icon(Icons.directions_walk),
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context).translate('steps_label'),
+                  prefixIcon: const Icon(Icons.directions_walk),
                 ),
-                validator: (v) => (v == null || v.isEmpty) ? 'Requis' : null,
+                validator: (v) => (v == null || v.isEmpty) ? AppLocalizations.of(context).translate('required') : null,
               ),
               const SizedBox(height: 12),
               Row(
@@ -71,9 +100,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: TextFormField(
                       controller: sleepHCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Sommeil (h)',
-                        prefixIcon: Icon(Icons.bedtime),
+                      decoration: InputDecoration(
+                        labelText: '${AppLocalizations.of(context).translate('sleep')} (${AppLocalizations.of(context).translate('hours')})',
+                        prefixIcon: const Icon(Icons.bedtime),
                       ),
                     ),
                   ),
@@ -82,8 +111,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: TextFormField(
                       controller: sleepMCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Min',
+                      decoration: InputDecoration(
+                        labelText: AppLocalizations.of(context).translate('sleep_minutes'),
                       ),
                     ),
                   ),
@@ -95,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
+            child: Text(AppLocalizations.of(context).translate('cancel')),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -111,20 +140,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('✓ $steps pas · ${hours}h${mins}m de sommeil enregistrés'),
+                      content: Text('✓ $steps ${AppLocalizations.of(context).translate('steps_unit')} · ${hours}h${mins}m ${AppLocalizations.of(context).translate('sleep_recorded')}'),
                       backgroundColor: Colors.green,
                     ),
                   );
                 }
               } catch (e) {
                 if (mounted) {
+                  final loc = AppLocalizations.of(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+                    SnackBar(content: Text('${loc.translate('error')}: $e'), backgroundColor: Colors.red),
                   );
                 }
               }
             },
-            child: const Text('Enregistrer'),
+            child: Text(AppLocalizations.of(context).translate('save')),
           ),
         ],
       ),
@@ -135,16 +165,16 @@ class _HomeScreenState extends State<HomeScreen> {
     sleepMCtrl.dispose();
   }
 
-  /// Synchronise les vitaux depuis Health Connect en arrière-plan
+  /// Synchronise les vitaux depuis Health Connect en arriÃ¨re-plan
   Future<void> _syncHealthConnect({bool showFeedback = false}) async {
     final healthService = HealthService();
-    // Vérification de disponibilité (méthode statique, pas de binding IPC)
+    // VÃ©rification de disponibilitÃ© (mÃ©thode statique, pas de binding IPC)
     final available = await healthService.isAvailable();
     if (!available) {
       if (showFeedback && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Health Connect non disponible sur cet appareil.'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).translate('health_connect_unavailable')),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 3),
           ),
@@ -163,8 +193,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!authorized) {
       if (showFeedback && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Accès Health Connect requis. Vérifiez les paramètres de l\'appli Santé Connect ou relancez l\'application.'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).translate('health_connect_required')),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 4),
           ),
@@ -185,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (showFeedback && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✓ $steps pas · ${sleep ~/ 60}h${sleep % 60}m synchronisés'),
+              content: Text('âœ“ $steps pas Â· ${sleep ~/ 60}h${sleep % 60}m synchronisÃ©s'),
               backgroundColor: Colors.green,
             ),
           );
@@ -193,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (_) {}
     } else if (showFeedback && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucune donnée Health Connect disponible aujourd\'hui.')),
+        const SnackBar(content: Text('Aucune donnÃ©e Health Connect disponible aujourd\'hui.')),
       );
     }
   }
@@ -201,6 +231,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _stepSub?.cancel();
+    _sleepSub?.cancel();
     super.dispose();
   }
 
@@ -209,10 +241,37 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final data = await Api.getDashboard();
       if (!mounted) return;
-      setState(() {
-        _dashboardData = data;
-        _loading = false;
-      });
+      final newMeals = data['todayMeals'] ?? [];
+      
+      // Animation logic for AnimatedList
+      if (_todayMeals.isEmpty && newMeals.isNotEmpty) {
+        // Initial load
+        setState(() {
+          _dashboardData = data;
+          _todayMeals = List.from(newMeals);
+          _loading = false;
+        });
+      } else if (newMeals.length > _todayMeals.length) {
+        // Items added (added at the end for oldest-to-newest order)
+        final addedCount = newMeals.length - _todayMeals.length;
+        final startIndex = _todayMeals.length;
+        setState(() {
+          _dashboardData = data;
+          _loading = false;
+        });
+        for (int i = 0; i < addedCount; i++) {
+          final newIdx = startIndex + i;
+          _todayMeals.add(newMeals[newIdx]);
+          _timelineKey.currentState?.insertItem(newIdx);
+        }
+      } else {
+        // No new items or deletion (simpler refresh)
+        setState(() {
+          _dashboardData = data;
+          _todayMeals = List.from(newMeals);
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -248,12 +307,46 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Ouvre le scanner et redirige vers l'ajout de repas si un produit est trouvÃ©
+  Future<void> _openScanner() async {
+    setState(() => _quickAddExpanded = false);
+    final result = await Navigator.push<dynamic>(
+      context,
+      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+    );
+    
+    if (result != null && mounted) {
+      if (result == true) {
+        // Le repas a Ã©tÃ© enregistrÃ© DIRECTEMENT depuis le scanner
+        _loadDashboard(silent: true);
+        return;
+      }
+
+      final product = result is Map ? result['product'] as NutritionProduct? : result as NutritionProduct?;
+      final quantity = result is Map ? result['quantity'] as double? : null;
+
+      if (product != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AddMealScreen(
+              themeProvider: widget.themeProvider,
+              initialProduct: product,
+              initialQuantity: quantity,
+            ),
+          ),
+        ).then((_) => _loadDashboard(silent: true));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context);
     final isDark = widget.themeProvider.isDarkMode;
-    final primaryColor = Theme.of(context).primaryColor;
-    final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF8F9FA);
+    final theme = Theme.of(context);
+    final primaryColor = theme.primaryColor;
+    final bgColor = theme.scaffoldBackgroundColor;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -280,7 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(height: 14),
                           _buildQuickActions(isDark, primaryColor, loc),
                           const SizedBox(height: 18),
-                          _buildNutritionTimeline(isDark, primaryColor),
+                          _buildNutritionTimeline(isDark, primaryColor, loc),
                         ],
                       ),
                     ),
@@ -299,8 +392,17 @@ class _HomeScreenState extends State<HomeScreen> {
     
     // Full date format (e.g. "Tuesday, 7 April")
     final now = DateTime.now();
-    final months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    final days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final months = [
+      loc.translate('january'), loc.translate('february'), loc.translate('march'),
+      loc.translate('april'), loc.translate('may'), loc.translate('june'),
+      loc.translate('july'), loc.translate('august'), loc.translate('september'),
+      loc.translate('october'), loc.translate('november'), loc.translate('december')
+    ];
+    final days = [
+      loc.translate('monday'), loc.translate('tuesday'), loc.translate('wednesday'),
+      loc.translate('thursday'), loc.translate('friday'), loc.translate('saturday'),
+      loc.translate('sunday')
+    ];
     final dateStr = "${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}";
 
     return Row(
@@ -310,7 +412,7 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.only(top: 5),
           child: CircleAvatar(
             radius: 22,
-            backgroundColor: primaryColor.withOpacity(0.2),
+            backgroundColor: primaryColor.withValues(alpha: 0.2),
             backgroundImage: (user['photoUrl'] != null) ? NetworkImage(user['photoUrl']) : null,
             child: (user['photoUrl'] == null) 
               ? Text(
@@ -326,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "Hi, $name!",
+                loc.translate('hi_name').replaceAll('{name}', name),
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -337,13 +439,6 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(dateStr, style: TextStyle(fontSize: 14, color: isDark ? Colors.grey[400] : Colors.grey[600])),
             ],
           ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.calendar_today_outlined),
-          color: isDark ? Colors.grey[400] : Colors.grey[600],
-          onPressed: () {
-            // Future calendar feature
-          },
         ),
         Stack(
           children: [
@@ -382,46 +477,73 @@ class _HomeScreenState extends State<HomeScreen> {
     final left = (goal - consumed).clamp(0, goal);
     final progress = (consumed / goal).clamp(0.0, 1.0);
 
-    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final theme = Theme.of(context);
+    final cardColor = theme.cardColor;
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? theme.dividerColor : Colors.grey[200]!,
+          width: 1,
+        ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            loc.translate('daily_nutrition'),
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                loc.translate('daily_nutrition'),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF6FF5B5).withValues(alpha: 0.1) : const Color(0xFFE0F2FE),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  loc.translate('in_progress'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? const Color(0xFF6FF5B5) : const Color(0xFF0EA5E9),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           Row(
             children: [
               // Ring progress
               SizedBox(
-                width: 100,
-                height: 100,
+                width: 120,
+                height: 120,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
                     CircularProgressIndicator(
                       value: progress,
-                      strokeWidth: 8,
-                      backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                      strokeWidth: 10,
+                      strokeCap: StrokeCap.round,
+                      backgroundColor: isDark ? theme.dividerColor : Colors.grey[200],
                       valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
                     ),
                     Center(
@@ -431,16 +553,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           Text(
                             left.toInt().toString(),
                             style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black87,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w900,
+                              color: isDark ? const Color(0xFFE8F5F0) : Colors.black87,
+                              letterSpacing: -1,
                             ),
                           ),
                           Text(
-                            loc.translate('calories_left').split(' ')[0], // 'Kcal'
+                            loc.translate('calories_left'),
                             style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? Colors.grey[400] : Colors.grey[600],
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? theme.colorScheme.secondary : (Colors.grey[600] ?? Colors.grey),
                             ),
                           ),
                         ],
@@ -449,16 +573,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              const SizedBox(width: 24),
-              // Macros
+              const SizedBox(width: 20),
+              // Macros Mini-Cards
               Expanded(
                 child: Column(
                   children: [
-                    _buildMacroBar('Protein', nutrition['protein'], const Color(0xFF4CAF50), isDark, loc),
+                    _buildMacroProgressBar('protein', nutrition['protein'], const Color(0xFF7DA37C), isDark, loc),
                     const SizedBox(height: 12),
-                    _buildMacroBar('Carbs', nutrition['carbs'], const Color(0xFFFFB84D), isDark, loc),
+                    _buildMacroProgressBar('carbs', nutrition['carbs'], const Color(0xFF5BA4FA), isDark, loc),
                     const SizedBox(height: 12),
-                    _buildMacroBar('Fat', nutrition['fat'], const Color(0xFF9C27B0), isDark, loc),
+                    _buildMacroProgressBar('fats', nutrition['fats'] ?? nutrition['fat'], const Color(0xFFFFBB33), isDark, loc),
                   ],
                 ),
               ),
@@ -469,10 +593,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMacroBar(String name, Map<String, dynamic>? data, Color color, bool isDark, AppLocalizations loc) {
+  Widget _buildMacroProgressBar(String name, Map<String, dynamic>? data, Color color, bool isDark, AppLocalizations loc) {
     if (data == null) return const SizedBox();
-    final consumed = data['consumed']?.toDouble() ?? 0.0;
-    final goal = data['goal']?.toDouble() ?? 100.0;
+    final consumed = (data['consumed']?.toDouble() ?? 0.0).toInt();
+    int goal = (data['goal']?.toDouble() ?? 100.0).toInt();
+    if (goal <= 0) goal = 100; // Fallback pour éviter la division par zéro ou "0/0g"
     final progress = (consumed / goal).clamp(0.0, 1.0);
     final localizedName = loc.translate(name.toLowerCase());
 
@@ -484,21 +609,48 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Text(
               localizedName,
-              style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? const Color(0xFF9FBFB3) : Colors.grey[700],
+              ),
             ),
             Text(
-              "${consumed.toInt()}/${goal.toInt()}g",
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+              "${consumed}/${goal}g",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: isDark ? const Color(0xFFE8F5F0) : Colors.black87,
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        LinearProgressIndicator(
-          value: progress,
-          backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
-          valueColor: AlwaysStoppedAnimation<Color>(color),
-          minHeight: 6,
-          borderRadius: BorderRadius.circular(3),
+        const SizedBox(height: 6),
+        Container(
+          height: 8,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[200],
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: progress,
+            child: Container(
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(4),
+                boxShadow: [
+                  if (isDark)
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -525,21 +677,49 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 12),
         ...insights.map((insight) {
           final type = insight['type'] as String;
+          String message = insight['message'] as String;
+          
+          // Localize backend messages (supports both IDs and legacy strings)
+          if (message == 'insight_hydration' || message.contains('water intake')) {
+            message = loc.translate('insight_hydration');
+          } else if (message == 'insight_sleep' || message.contains('less than 6 hours')) {
+            message = loc.translate('insight_sleep');
+          } else if (message == 'insight_protein' || message.contains('protein intake is low')) {
+            message = loc.translate('insight_protein');
+          } else if (message == 'insight_positive' || message.contains('Great job')) {
+            message = loc.translate('insight_positive');
+          } else if (message == 'insight_overeating' || message.contains('exceeded your daily calorie goal')) {
+            if (message == 'insight_overeating') {
+               final diff = insight['data']?['diff']?.toString() ?? '0';
+               message = loc.translate('insight_overeating').replaceAll('{diff}', diff);
+            } else {
+              final parts = message.split('by ');
+              if (parts.length > 1) {
+                final diff = parts[1].split(' ').first;
+                message = loc.translate('insight_overeating').replaceAll('{diff}', diff);
+              }
+            }
+          } else {
+            // Try to translate as key anyway
+            message = loc.translate(message);
+          }
+
           Color color;
           IconData icon;
           if (type == 'hydration') { color = Colors.blue; icon = Icons.water_drop; }
           else if (type == 'sleep') { color = Colors.indigo; icon = Icons.nightlight; }
           else if (type == 'positive') { color = Colors.green; icon = Icons.thumb_up; }
           else if (type == 'overeating') { color = Colors.red; icon = Icons.warning; }
+          else if (type == 'protein') { color = Colors.orange; icon = Icons.fitness_center; }
           else { color = Colors.orange; icon = Icons.info; }
 
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: color.withOpacity(0.3)),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -547,7 +727,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
-                    insight['message'],
+                    message,
                     style: TextStyle(
                       color: isDark ? Colors.white : Colors.black87,
                       fontSize: 14,
@@ -603,7 +783,7 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFDDEBFA),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accentColor.withOpacity(0.18)),
+        border: Border.all(color: accentColor.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
@@ -611,7 +791,7 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.15),
+              color: accentColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(Icons.local_drink, color: accentColor),
@@ -644,12 +824,12 @@ class _HomeScreenState extends State<HomeScreen> {
   // ==========================================
   // 5. Nutrition Timeline
   // ==========================================
-  Widget _buildNutritionTimeline(bool isDark, Color primaryColor) {
+  Widget _buildNutritionTimeline(bool isDark, Color primaryColor, AppLocalizations loc) {
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textPrimary = isDark ? Colors.white : const Color(0xFF111827);
     final textSecondary = isDark ? Colors.grey[400]! : const Color(0xFF64748B);
     final lineColor = isDark ? Colors.white24 : const Color(0xFFDDE3EC);
-    final accentBlue = primaryColor;
+    final accentBlue = isDark ? primaryColor : const Color(0xFF166534);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -657,18 +837,21 @@ class _HomeScreenState extends State<HomeScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Nutrition Timeline',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: textPrimary,
+            Expanded(
+              child: Text(
+                loc.translate('nutrition_timeline'),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: textPrimary,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             TextButton(
               onPressed: () {},
               child: Text(
-                'View All',
+                loc.translate('view_all'),
                 style: TextStyle(
                   color: accentBlue,
                   fontWeight: FontWeight.w600,
@@ -689,42 +872,66 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             Column(
               children: [
-                _buildTimelineMealItem(
-                  isDark: isDark,
-                  cardColor: cardColor,
-                  textPrimary: textPrimary,
-                  textSecondary: textSecondary,
-                  accentBlue: accentBlue,
-                  timeLabel: '08:15 AM',
-                  title: 'Avocado Toast & Egg',
-                  subtitle: '340 kcal • 18g Protein',
-                  autoSynced: true,
-                  isCurrent: false,
+                AnimatedList(
+                  key: _timelineKey,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  initialItemCount: _todayMeals.length,
+                  itemBuilder: (context, index, animation) {
+                    final meal = _todayMeals[index];
+                    return _buildAnimatedTimelineItem(meal, animation, isDark, cardColor, textPrimary, textSecondary, accentBlue, loc);
+                  },
                 ),
-                const SizedBox(height: 10),
-                _buildTimelineMealItem(
-                  isDark: isDark,
-                  cardColor: cardColor,
-                  textPrimary: textPrimary,
-                  textSecondary: textSecondary,
-                  accentBlue: accentBlue,
-                  timeLabel: '11:00 AM',
-                  title: 'Greek Yogurt with Berries',
-                  subtitle: '120 kcal • 12g Protein',
-                  autoSynced: false,
-                  isCurrent: false,
-                ),
-                const SizedBox(height: 8),
                 _buildNowSmartScan(
                   isDark: isDark,
                   accentBlue: accentBlue,
                   textSecondary: textSecondary,
+                  loc: loc,
                 ),
               ],
             ),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildAnimatedTimelineItem(dynamic meal, Animation<double> animation, bool isDark, Color cardColor, Color textPrimary, Color textSecondary, Color accentBlue, AppLocalizations loc) {
+    final created = (DateTime.tryParse(meal['createdAt'] ?? '') ?? DateTime.now()).toLocal();
+    final hh = created.hour.toString().padLeft(2, '0');
+    final mm = created.minute.toString().padLeft(2, '0');
+    final nutrition = meal['nutrition'] ?? {};
+    final kcal = (nutrition['calories'] ?? 0).toInt();
+    final protein = (nutrition['protein'] ?? nutrition['proteins'] ?? 0).toInt();
+
+    return FadeTransition(
+      opacity: animation,
+      child: SizeTransition(
+        sizeFactor: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, -0.1),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildTimelineMealItem(
+              isDark: isDark,
+              cardColor: cardColor,
+              textPrimary: textPrimary,
+              textSecondary: textSecondary,
+              accentBlue: accentBlue,
+              timeLabel: '$hh:$mm',
+              title: meal['name'] ?? loc.translate('meal_default'),
+              subtitle: '$kcal kcal • ${protein}g Protein',
+              imageUrl: meal['imageUrl'],
+              autoSynced: meal['source'] == 'health_connect',
+              isCurrent: false,
+              loc: loc,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -737,8 +944,10 @@ class _HomeScreenState extends State<HomeScreen> {
     required String timeLabel,
     required String title,
     required String subtitle,
+    String? imageUrl,
     required bool autoSynced,
     required bool isCurrent,
+    required AppLocalizations loc,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -747,7 +956,7 @@ class _HomeScreenState extends State<HomeScreen> {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: isCurrent ? accentBlue : (isDark ? const Color(0xFF26324A) : accentBlue.withOpacity(0.10)),
+            color: isCurrent ? accentBlue : (isDark ? const Color(0xFF26324A) : accentBlue.withValues(alpha: 0.10)),
             shape: BoxShape.circle,
             border: Border.all(color: accentBlue, width: 2),
           ),
@@ -777,11 +986,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: accentBlue.withOpacity(0.12),
+                        color: accentBlue.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        'AUTO-SYNCED',
+                        loc.translate('auto_synced'),
                         style: TextStyle(
                           color: accentBlue,
                           fontSize: 12,
@@ -809,8 +1018,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         color: isDark ? Colors.grey[800] : const Color(0xFFF2F4F7),
+                        image: (imageUrl != null && imageUrl.isNotEmpty)
+                            ? DecorationImage(
+                                image: NetworkImage(imageUrl),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
                       ),
-                      child: Icon(Icons.fastfood, color: textSecondary, size: 34),
+                      child: (imageUrl == null || imageUrl.isEmpty)
+                          ? Icon(Icons.fastfood, color: textSecondary, size: 34)
+                          : null,
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -852,6 +1069,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isDark,
     required Color accentBlue,
     required Color textSecondary,
+    required AppLocalizations loc,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -864,7 +1082,7 @@ class _HomeScreenState extends State<HomeScreen> {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: accentBlue.withOpacity(0.25),
+                color: accentBlue.withValues(alpha: 0.25),
                 blurRadius: 10,
                 offset: const Offset(0, 3),
               ),
@@ -878,7 +1096,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'NOW',
+                loc.translate('now'),
                 style: TextStyle(
                   color: accentBlue,
                   fontSize: 16,
@@ -886,53 +1104,61 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF18202E) : accentBlue.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: accentBlue.withOpacity(0.35),
-                    width: 2,
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'Ready for Lunch?',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: accentBlue,
+              Builder(
+                builder: (context) {
+                  final theme = Theme.of(context);
+                  final isDark = theme.brightness == Brightness.dark;
+                  final accentColor = isDark ? theme.primaryColor : const Color(0xFF166534);
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+                    decoration: BoxDecoration(
+                      color: isDark ? theme.cardColor : accentColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: isDark ? theme.dividerColor : accentColor.withValues(alpha: 0.35),
+                        width: 2,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Scan your meal for instant macro tracking',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: textSecondary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: Column(
+                      children: [
+                        Text(
+                          loc.translate('ready_for_meal'),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: accentColor,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          loc.translate('scan_meal_desc'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: isDark ? const Color(0xFF9FBFB3) : Colors.grey[600],
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        ElevatedButton.icon(
+                          onPressed: _openScanner,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accentColor,
+                            minimumSize: const Size(double.infinity, 50),
+                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          icon: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 20),
+                          label: const Text(
+                            'Start Smart Scan',
+                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 14),
-                    ElevatedButton.icon(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: accentBlue,
-                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      icon: const Icon(Icons.document_scanner, color: Colors.white, size: 20),
-                      label: const Text(
-                        'Start Smart Scan',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                }
               ),
             ],
           ),
@@ -946,47 +1172,218 @@ class _HomeScreenState extends State<HomeScreen> {
   // ==========================================
   Widget _buildVitals(bool isDark, Color primaryColor, AppLocalizations loc) {
     final vitals = _dashboardData?['vitals'] ?? {};
-    final steps = vitals['steps'] ?? 0;
     final stepsGoal = vitals['stepsGoal'] ?? 10000;
-    final sleep = vitals['sleepDuration'] ?? 0;
+
+    // Priorité : données temps réel (capteur) > données backend
+    final steps = _liveSteps > 0 ? _liveSteps : (vitals['steps'] ?? 0);
+    final sleep = _liveSleep?.sleepMinutes ?? (vitals['sleepDuration'] ?? 0);
     final sleepQuality = vitals['sleepQuality'] ?? 85;
+    final sleepSource = _liveSleep?.sleepSource ?? 'manual';
+    final sleepConfidence = _liveSleep?.sleepConfidence ?? 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          loc.translate('todays_vitals'),
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              loc.translate('todays_vitals'),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            // Bouton synchronisation manuelle
+            TextButton.icon(
+              onPressed: () => SyncService().syncNow(),
+              icon: Icon(Icons.sync, size: 16, color: primaryColor),
+              label: Text('Sync', style: TextStyle(color: primaryColor, fontSize: 12)),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
+            // ── Carte Pas (temps réel) ──────────────────────────────────────────
             _buildVitalCard(
               icon: FontAwesomeIcons.shoePrints,
               label: loc.translate('steps').toUpperCase(),
               value: _formatSteps(steps),
-              subtext: 'Goal: ${_formatSteps(stepsGoal)}',
+              subtext: 'Objectif : ${_formatSteps(stepsGoal)}',
               color: const Color(0xFFFF8A34),
               isDark: isDark,
+              badge: _liveSteps > 0 ? 'LIVE' : null,
+              badgeColor: Colors.green,
             ),
             const SizedBox(width: 8),
-            _buildVitalCard(
-              icon: Icons.nightlight_round,
-              label: loc.translate('sleep').toUpperCase(),
-              value: "${sleep ~/ 60}h ${sleep % 60}m",
-              subtext: '$sleepQuality% Sleep Quality',
-              color: const Color(0xFF5B5BF2),
+            // ── Carte Sommeil (semi-auto) ──────────────────────────────────────
+            _buildSleepCard(
               isDark: isDark,
+              sleepMinutes: sleep,
+              sleepSource: sleepSource,
+              sleepConfidence: sleepConfidence,
+              sleepQuality: sleepQuality,
+              primaryColor: primaryColor,
             ),
           ],
         ),
-        const SizedBox(height: 20), // Reduced gap before next section
+        const SizedBox(height: 20),
       ],
     );
+  }
+
+  /// Carte Sommeil dédiée avec badge source et bouton correction manuelle.
+  Widget _buildSleepCard({
+    required bool isDark,
+    required int sleepMinutes,
+    required String sleepSource,
+    required int sleepConfidence,
+    required int sleepQuality,
+    required Color primaryColor,
+  }) {
+    const sleepColor = Color(0xFF5B5BF2);
+    final h = sleepMinutes ~/ 60;
+    final m = sleepMinutes % 60;
+    final sleepText = sleepMinutes == 0 ? '--' : '${h}h ${m}m';
+    final isAuto = sleepSource == 'auto';
+    final confidenceColor = sleepConfidence >= 70
+        ? Colors.green
+        : sleepConfidence >= 40
+            ? Colors.orange
+            : Colors.red;
+
+    final theme = Theme.of(context);
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? theme.dividerColor : sleepColor.withValues(alpha: 0.16)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Icon(Icons.nightlight_round, color: Color(0xFF5B5BF2), size: 22),
+                // Badge source : AUTO ou MANUEL
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isAuto
+                        ? Colors.indigo.withValues(alpha: 0.15)
+                        : Colors.grey.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    isAuto ? 'AUTO' : 'MANUEL',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: isAuto ? Colors.indigo : Colors.grey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              sleepText,
+              style: TextStyle(
+                fontSize: 36 / 1.35,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : const Color(0xFF111827),
+              ),
+            ),
+            const SizedBox(height: 2),
+            // Score de confiance (seulement si auto et > 0)
+            if (isAuto && sleepConfidence > 0)
+              Row(
+                children: [
+                  Icon(Icons.verified, size: 12, color: confidenceColor),
+                  const SizedBox(width: 3),
+                  Text(
+                    'Confiance $sleepConfidence%',
+                    style: TextStyle(fontSize: 11, color: confidenceColor),
+                  ),
+                ],
+              )
+            else
+              Text(
+                '$sleepQuality% Sleep Quality',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.grey[400] : const Color(0xFF6B7280),
+                ),
+              ),
+            const SizedBox(height: 8),
+            // Bouton de correction manuelle
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showSleepEditDialog(),
+                icon: const Icon(Icons.edit, size: 12),
+                label: const Text('Corriger', style: TextStyle(fontSize: 11)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  foregroundColor: sleepColor,
+                  side: BorderSide(color: sleepColor.withValues(alpha: 0.4)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Dialogue de correction manuelle du sommeil.
+  Future<void> _showSleepEditDialog() async {
+    TimeOfDay startTime = const TimeOfDay(hour: 23, minute: 0);
+    TimeOfDay endTime = const TimeOfDay(hour: 7, minute: 0);
+
+    final pickedStart = await showTimePicker(
+      context: context,
+      initialTime: startTime,
+      helpText: 'Heure de coucher',
+    );
+    if (pickedStart == null || !mounted) return;
+    startTime = pickedStart;
+
+    final pickedEnd = await showTimePicker(
+      context: context,
+      initialTime: endTime,
+      helpText: 'Heure de rÃ©veil',
+    );
+    if (pickedEnd == null || !mounted) return;
+    endTime = pickedEnd;
+
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day - 1, startTime.hour, startTime.minute);
+    var end = DateTime(now.year, now.month, now.day, endTime.hour, endTime.minute);
+    if (end.isBefore(start)) end = end.add(const Duration(days: 1));
+
+    await SleepService().setManual(start, end);
+    final durationMin = end.difference(start).inMinutes;
+    await Api.updateVitals({
+      'sleepDuration': durationMin,
+      'sleepStart': start.toIso8601String(),
+      'sleepEnd': end.toIso8601String(),
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('âœ“ Sommeil corrigÃ© : ${durationMin ~/ 60}h ${durationMin % 60}m'),
+          backgroundColor: Colors.indigo,
+        ),
+      );
+    }
   }
 
   String _formatSteps(dynamic value) {
@@ -1008,14 +1405,17 @@ class _HomeScreenState extends State<HomeScreen> {
     required String subtext,
     required Color color,
     required bool isDark,
+    String? badge,
+    Color? badgeColor,
   }) {
+    final theme = Theme.of(context);
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF7FAFF),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.16)),
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? theme.dividerColor : color.withValues(alpha: 0.16)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1024,14 +1424,31 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Icon(icon, color: color, size: 22),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.grey[400] : const Color(0xFF95A4B8),
+                if (badge != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: (badgeColor ?? color).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      badge,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: badgeColor ?? color,
+                      ),
+                    ),
+                  )
+                else
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.grey[400] : const Color(0xFF95A4B8),
+                    ),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -1045,7 +1462,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 2),
             Text(
-              subtext,
+              badge != null ? label : subtext,
               style: TextStyle(
                 fontSize: 12,
                 color: isDark ? Colors.grey[400] : const Color(0xFF6B7280),
@@ -1064,15 +1481,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDark = widget.themeProvider.isDarkMode;
     final primaryColor = Theme.of(context).primaryColor;
     
+    final navBg = isDark ? const Color(0xFF04120E) : Colors.white;
+    final topBorder = isDark ? const Color(0xFF2A4A3F) : Colors.grey[200]!;
+    
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: navBg,
+        border: Border(top: BorderSide(color: topBorder, width: 1)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -4),
-          ),
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
         ],
       ),
       child: SafeArea(
@@ -1081,21 +1503,19 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(Icons.home, 'HOME', true, primaryColor, isDark, () {}),
-              _buildNavItem(Icons.insights_outlined, 'INSIGHTS', false, primaryColor, isDark, () {
-                setState(() => _quickAddExpanded = false);
-                Navigator.pushReplacementNamed(context, '/meals');
-              }),
+              _buildNavItem(Icons.home_filled, 'HOME', true, primaryColor, isDark, () {}),
+              _buildNavItem(Icons.insights_rounded, 'INSIGHTS', false, primaryColor, isDark, () {
+                  setState(() => _quickAddExpanded = false);
+                  Navigator.pushReplacementNamed(context, '/insights');
+                }),
               _buildPlusNavItem(primaryColor),
-              _buildNavItem(Icons.person_outline, 'PROFILE', false, primaryColor, isDark, () {
-                setState(() => _quickAddExpanded = false);
+              _buildNavItem(Icons.person_rounded, 'PROFILE', false, primaryColor, isDark, () {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (_) => ProfileSummaryScreen(themeProvider: widget.themeProvider)),
                 );
               }),
-              _buildNavItem(Icons.settings_outlined, 'SETTINGS', false, primaryColor, isDark, () {
-                setState(() => _quickAddExpanded = false);
+              _buildNavItem(Icons.settings_rounded, 'SETTINGS', false, primaryColor, isDark, () {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (_) => SettingsScreen(themeProvider: widget.themeProvider)),
@@ -1188,9 +1608,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: primaryColor.withOpacity(0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+                      color: primaryColor.withValues(alpha: 0.4),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 0),
                     ),
                   ],
                 ),
@@ -1239,12 +1660,12 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: highlighted ? color.withOpacity(0.12) : Colors.white,
+                color: highlighted ? color.withValues(alpha: 0.12) : Colors.white,
                 shape: BoxShape.circle,
-                border: Border.all(color: highlighted ? color : color.withOpacity(0.35), width: highlighted ? 2 : 1),
+                border: Border.all(color: highlighted ? color : color.withValues(alpha: 0.35), width: highlighted ? 2 : 1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.16),
+                    color: Colors.black.withValues(alpha: 0.16),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),
@@ -1295,15 +1716,47 @@ class _HomeScreenState extends State<HomeScreen> {
       _hoveredQuickAction = null;
     });
     if (index == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Camera scan bientot disponible')),
-      );
+      Navigator.push<dynamic>(
+        context,
+        MaterialPageRoute(builder: (_) => SmartScanScreen()),
+      ).then((result) async {
+        if (result != null && result is NutritionProduct) {
+          try {
+            final now = DateTime.now();
+            final hour = now.hour;
+            String type = 'snack';
+            if (hour >= 5 && hour < 11) type = 'breakfast';
+            else if (hour >= 11 && hour < 16) type = 'lunch';
+            else if (hour >= 18 && hour < 23) type = 'dinner';
+
+            await Api.addMeal({
+              'name': result.name,
+              'type': type,
+              'quantity': 1,
+              'unit': 'portion',
+              'time': '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
+              'imageUrl': result.image,
+              'nutrition': {
+                'calories': result.nutrition['calories'] ?? 0,
+                'carbs': result.nutrition['carbs'] ?? 0,
+                'proteins': result.nutrition['proteins'] ?? 0,
+                'fats': result.nutrition['fats'] ?? 0,
+                'source': 'smart_scan',
+              }
+            });
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Repas ajouté avec succès')));
+            }
+          } catch (e) {
+            print("Erreur lors de l'ajout du repas scanné : $e");
+          }
+        }
+        _loadDashboard(silent: true);
+      });
       return;
     }
     if (index == 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Barcode scan bientot disponible')),
-      );
+      _openScanner();
       return;
     }
     Navigator.push(
@@ -1313,27 +1766,67 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildNavItem(IconData icon, String label, bool isActive, Color primaryColor, bool isDark, VoidCallback onTap) {
+    final Color spotlightColor = isDark ? Colors.white : primaryColor;
+    
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isActive ? primaryColor : Colors.grey,
-            size: 26,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-              color: isActive ? primaryColor : Colors.grey,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 60,
+        height: 50,
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            if (isActive)
+              Positioned(
+                top: -12,
+                child: Column(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: spotlightColor,
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(4)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: spotlightColor.withOpacity(0.5),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ClipPath(
+                      clipper: SpotlightClipper(),
+                      child: Container(
+                        width: 56,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              spotlightColor.withOpacity(0.25),
+                              spotlightColor.withOpacity(0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Icon(
+              icon,
+              color: isActive ? spotlightColor : (isDark ? Colors.grey[600] : const Color(0xFF1E1E1E).withOpacity(0.5)),
+              size: 30,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
+

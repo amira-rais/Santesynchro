@@ -220,12 +220,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
             ),
             onPressed: () => langProvider.toggleLanguage(),
           ),
-          IconButton(
-            icon: Icon(
-              widget.themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-            ),
-            onPressed: () => widget.themeProvider.toggleDarkMode(),
-          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -239,7 +233,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
